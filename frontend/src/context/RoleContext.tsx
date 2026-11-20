@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export type UserRole = 'guest' | 'user';
 
@@ -33,26 +33,30 @@ interface RoleContextType {
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<RoleUser | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<RoleUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      const savedRole = localStorage.getItem('dinail_role') as UserRole | null;
+      if (savedRole && savedRole !== 'guest' && MOCK_USERS[savedRole]) {
+        return MOCK_USERS[savedRole];
+      }
+    }
+    return null;
+  });
+
+  const [userId, setUserId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const savedRole = localStorage.getItem('dinail_role') as UserRole | null;
+      let savedUserId = localStorage.getItem('dinail_userId');
+      if (!savedUserId && savedRole && savedRole !== 'guest') {
+        savedUserId = generateUserId();
+        localStorage.setItem('dinail_userId', savedUserId);
+      }
+      return savedUserId || null;
+    }
+    return null;
+  });
+
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Restore session from localStorage on mount
-  useEffect(() => {
-    const savedRole = localStorage.getItem('dinail_role') as UserRole | null;
-    if (savedRole && savedRole !== 'guest' && MOCK_USERS[savedRole]) {
-      setCurrentUser(MOCK_USERS[savedRole]);
-    }
-
-    let savedUserId = localStorage.getItem('dinail_userId');
-    if (!savedUserId && savedRole && savedRole !== 'guest') {
-      savedUserId = generateUserId();
-      localStorage.setItem('dinail_userId', savedUserId);
-    }
-    if (savedUserId) {
-      setUserId(savedUserId);
-    }
-  }, []);
 
   const login = (role: Exclude<UserRole, 'guest'>) => {
     const user = MOCK_USERS[role];

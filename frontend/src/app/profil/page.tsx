@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useRef, Suspense } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -8,8 +8,6 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { useRole } from '@/context/RoleContext';
 import { DINAIL_ASSETS } from '@/constants/assets';
-
-// ─── Minimalist SVG Icons (strokeWidth 1.5 - 1.75, currentColor) ──────────────
 
 function IconUser({ size = 18 }: { size?: number }) {
   return (
@@ -127,8 +125,6 @@ function IconEmptyBox({ size = 36 }: { size?: number }) {
   );
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 export type OrderStatus =
   | 'menunggu'
   | 'proses'
@@ -170,13 +166,11 @@ export interface NailSizeData {
   updatedAt?: string;
 }
 
-// ─── Preset Constants ────────────────────────────────────────────────────────
-
 const SIZE_PRESETS: Record<Exclude<SizePreset, 'Custom'>, NailFingers> = {
   XS: { thumb: 14, index: 10, middle: 11, ring: 10, pinky: 8 },
-  S:  { thumb: 15, index: 11, middle: 12, ring: 11, pinky: 8 },
-  M:  { thumb: 16, index: 12, middle: 13, ring: 12, pinky: 9 },
-  L:  { thumb: 17, index: 13, middle: 14, ring: 13, pinky: 10 },
+  S: { thumb: 15, index: 11, middle: 12, ring: 11, pinky: 8 },
+  M: { thumb: 16, index: 12, middle: 13, ring: 12, pinky: 9 },
+  L: { thumb: 17, index: 13, middle: 14, ring: 13, pinky: 10 },
 };
 
 const DEFAULT_NAIL_DATA: NailSizeData = {
@@ -186,8 +180,6 @@ const DEFAULT_NAIL_DATA: NailSizeData = {
   syncHands: true,
   photoUrl: null,
 };
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   menunggu: 'MENUNGGU REVIEW',
@@ -224,8 +216,6 @@ const generateConsultationId = (): string => {
   const seq = String(Math.floor(1 + Math.random() * 99)).padStart(2, '0');
   return `DNL-KNS-${dateStr}-${seq}`;
 };
-
-// ─── Seed Data ────────────────────────────────────────────────────────────────
 
 const SEED_ORDERS: OrderCard[] = [
   {
@@ -271,31 +261,29 @@ function loadOrders(): OrderCard[] {
   try {
     const raw = localStorage.getItem(LS_KEY_ORDERS);
     if (raw) return JSON.parse(raw) as OrderCard[];
-  } catch {}
+  } catch { }
   return [];
 }
 
 function saveOrders(orders: OrderCard[]) {
   try {
     localStorage.setItem(LS_KEY_ORDERS, JSON.stringify(orders));
-  } catch {}
+  } catch { }
 }
 
 function loadNailData(): NailSizeData {
   try {
     const raw = localStorage.getItem(LS_KEY_NAIL_SIZE);
     if (raw) return JSON.parse(raw) as NailSizeData;
-  } catch {}
+  } catch { }
   return DEFAULT_NAIL_DATA;
 }
 
 function saveNailData(data: NailSizeData) {
   try {
     localStorage.setItem(LS_KEY_NAIL_SIZE, JSON.stringify(data));
-  } catch {}
+  } catch { }
 }
-
-// ─── UI Helpers ──────────────────────────────────────────────────────────────
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -336,8 +324,6 @@ function CopyButton({ text }: { text: string }) {
     </button>
   );
 }
-
-// ─── Modal Konfirmasi Setelah Submit ──────────────────────────────────────────
 
 function SubmitConfirmationModal({
   order,
@@ -472,8 +458,6 @@ function SubmitConfirmationModal({
     </div>
   );
 }
-
-// ─── Modal Detail Konsultasi ──────────────────────────────────────────────────
 
 function OrderDetailModal({
   order,
@@ -667,8 +651,6 @@ function OrderDetailModal({
   );
 }
 
-// ─── Single Order Card Component ──────────────────────────────────────────────
-
 function OrderCardItem({
   order,
   onOpenDetail,
@@ -858,18 +840,17 @@ function OrderCardItem({
   );
 }
 
-// ─── Konten Tab: Ukuran Kuku Saya (FITUR PENGUKURAN KUKU) ──────────────────────
+// Konten Tab: Ukuran Kuku Saya (FITUR PENGUKURAN KUKU)
 
 function UkuranKukuTab() {
-  const [nailData, setNailData] = useState<NailSizeData>(DEFAULT_NAIL_DATA);
+  const [nailData, setNailData] = useState<NailSizeData>(() => {
+    if (typeof window !== 'undefined') {
+      return loadNailData();
+    }
+    return DEFAULT_NAIL_DATA;
+  });
   const [saveSuccess, setSaveSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    const loaded = loadNailData();
-    setNailData(loaded);
-  }, []);
 
   // Handle Preset Select
   const handleSelectPreset = (preset: SizePreset) => {
@@ -1482,8 +1463,6 @@ function UkuranKukuTab() {
   );
 }
 
-// ─── Konten Tab: Konsultasi Saya ──────────────────────────────────────────────
-
 function KonsultasiTab({
   initialDesign,
 }: {
@@ -1491,8 +1470,16 @@ function KonsultasiTab({
 }) {
   const [activeStatus, setActiveStatus] = useState<OrderStatus | 'semua'>('semua');
   const [searchQuery, setSearchQuery] = useState('');
-  const [orders, setOrders] = useState<OrderCard[]>([]);
-  const [showNewForm, setShowNewForm] = useState(false);
+  const [orders, setOrders] = useState<OrderCard[]>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = loadOrders();
+      if (stored.length > 0) return stored;
+      saveOrders(SEED_ORDERS);
+      return SEED_ORDERS;
+    }
+    return SEED_ORDERS;
+  });
+  const [showNewForm, setShowNewForm] = useState(Boolean(initialDesign));
 
   // Form states
   const [newDesign, setNewDesign] = useState(initialDesign || '');
@@ -1502,25 +1489,6 @@ function KonsultasiTab({
   // Modals state
   const [submittedOrder, setSubmittedOrder] = useState<OrderCard | null>(null);
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<OrderCard | null>(null);
-
-  // Auto open form if prefilled from query param
-  useEffect(() => {
-    if (initialDesign) {
-      setNewDesign(initialDesign);
-      setShowNewForm(true);
-    }
-  }, [initialDesign]);
-
-  // Load from localStorage or seed
-  useEffect(() => {
-    const stored = loadOrders();
-    if (stored.length > 0) {
-      setOrders(stored);
-    } else {
-      setOrders(SEED_ORDERS);
-      saveOrders(SEED_ORDERS);
-    }
-  }, []);
 
   // Filter real-time berdasarkan Tab Status dan Search Bar
   const filtered = orders.filter((o) => {
@@ -1866,8 +1834,6 @@ function KonsultasiTab({
   );
 }
 
-// ─── Konten Tab: Akun Saya ────────────────────────────────────────────────────
-
 function AkunTab({
   currentUser,
   userId,
@@ -1950,7 +1916,7 @@ function AkunTab({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 520 }}>
         {[
           { label: 'Nama Lengkap', value: name, setter: setName, type: 'text', readOnly: false },
-          { label: 'Email Terdaftar', value: currentUser?.email || 'sari@example.com', setter: () => {}, type: 'email', readOnly: true },
+          { label: 'Email Terdaftar', value: currentUser?.email || 'sari@example.com', setter: () => { }, type: 'email', readOnly: true },
           { label: 'Nomor WhatsApp', value: phone, setter: setPhone, type: 'tel', readOnly: false },
           { label: 'Kota / Wilayah', value: city, setter: setCity, type: 'text', readOnly: false },
         ].map((field) => (
@@ -2014,8 +1980,6 @@ function AkunTab({
     </div>
   );
 }
-
-// ─── Konten Tab: Notifikasi ───────────────────────────────────────────────────
 
 function NotifikasiTab() {
   const notifs = [
@@ -2083,8 +2047,6 @@ function NotifikasiTab() {
     </div>
   );
 }
-
-// ─── Main Content ─────────────────────────────────────────────────────────────
 
 function ProfileContent() {
   const { currentUser, userId, logout, openModal } = useRole();
