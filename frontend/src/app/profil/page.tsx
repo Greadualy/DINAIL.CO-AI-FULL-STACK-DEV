@@ -2064,6 +2064,7 @@ function ProfileContent() {
 
   const displayName = currentUser?.name || 'Sari Dewi';
   const displayInitial = displayName.charAt(0).toUpperCase();
+  const photoUrl = currentUser?.photoUrl;
 
   const handleMenuClick = (key: string) => {
     if (key === 'keluar') {
@@ -2120,23 +2121,38 @@ function ProfileContent() {
 
               {/* Header Profil: Avatar bulat di kiri, nama user, Ubah Profil, badge ID User */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-                <div
-                  style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: '50%',
-                    background: '#F37338',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 20,
-                    fontWeight: 700,
-                    color: '#FFFFFF',
-                    flexShrink: 0,
-                  }}
-                >
-                  {displayInitial}
-                </div>
+                {photoUrl ? (
+                  <img
+                    src={photoUrl}
+                    alt={displayName}
+                    style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      flexShrink: 0,
+                    }}
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: '50%',
+                      background: '#F37338',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 20,
+                      fontWeight: 700,
+                      color: '#FFFFFF',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {displayInitial}
+                  </div>
+                )}
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p
                     style={{
