@@ -30,6 +30,10 @@ coverage/
 .env*.local
 **/.env*
 !**/.env.example
+serviceAccountKey.json
+**/serviceAccountKey.json
+*firebase-adminsdk*.json
+**/*firebase-adminsdk*.json
 
 # Vercel
 .vercel/

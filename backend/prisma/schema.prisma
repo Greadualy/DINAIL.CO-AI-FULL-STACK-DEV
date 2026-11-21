@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  customer
+  admin
+  owner
+}
+
+enum ConsultationStatus {
+  PENDING
+  NEED_REPHOTO
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id                String         @id @default(uuid())
+  firebaseUid       String         @unique
+  email             String         @unique
+  name              String?
+  photoUrl          String?
+  phone             String?
+  role              Role           @default(customer)
+  savedSizePreset   String?
+  savedMeasurements Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  consultations     Consultation[]
+
+  @@map("users")
+}
+
+model Product {
+  id            String         @id @default(uuid())
+  name          String
+  tier          String
+  price         Int
+  priceRange    String?
+  description   String?
+  imageUrl      String?
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  consultations Consultation[]
+
+  @@map("products")
+}
+
+model Consultation {
+  id                    String             @id @default(uuid())
+  userId                String
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId             String?
+  product               Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
+  photoUrl              String?
+  customerNotes         String?
+  isValidPhoto          Boolean            @default(false)
+  coinDetected          Boolean            @default(false)
+  aiRejectionReason     String?
+  aiSuggestedSize       String?
+  aiMeasurements        Json?
+  confirmedSize         String?
+  confirmedMeasurements Json?
+  adminFeedback         String?
+  status                ConsultationStatus @default(PENDING)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@map("consultations")
+}
+
+model SaleRecord {
+  id           String   @id @default(uuid())
+  orderId      String   @unique
+  customerId   String?
+  channel      String
+  orderDate    DateTime
+  totalItems   Int
+  totalAmount  Int
+  pressOnCount Int
+  hasAccessory Boolean  @default(false)
+  highestTier  String?
+  categories   String?
+  createdAt    DateTime @default(now())
+
+  @@map("sale_records")
+}

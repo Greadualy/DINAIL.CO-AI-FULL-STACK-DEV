@@ -4,12 +4,16 @@ import React from 'react';
 import { useRole } from '@/context/RoleContext';
 
 export default function RoleSwitcherModal() {
-  const { isModalOpen, closeModal, login } = useRole();
+  const { isModalOpen, closeModal, login, loginWithGoogle } = useRole();
 
   if (!isModalOpen) return null;
 
   const handleLogin = () => {
     login('user');
+  };
+
+  const handleGoogleLogin = async () => {
+    await loginWithGoogle();
   };
 
   return (
@@ -154,7 +158,7 @@ export default function RoleSwitcherModal() {
           {/* Tombol 2: Continue with Google */}
           <button
             type="button"
-            onClick={handleLogin}
+            onClick={handleGoogleLogin}
             style={{
               height: '56px',
               borderRadius: '16px',
