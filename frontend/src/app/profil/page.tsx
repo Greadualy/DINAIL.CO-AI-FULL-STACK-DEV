@@ -139,7 +139,10 @@ export type OrderStatus =
   | 'proses'
   | 'siap_checkout'
   | 'selesai'
-  | 'dibatalkan';
+  | 'dibatalkan'
+  | 'Antrian'
+  | 'Disetujui'
+  | 'Ditolak';
 
 export interface OrderCard {
   consultationId: string;
@@ -156,6 +159,8 @@ export interface OrderCard {
   estimasiHarga: string;
   photoUrl: string;
   shopeeUrl?: string;
+  adminFeedback?: string;
+  reviewedAt?: string;
 }
 
 export type ActiveMenu = 'akun' | 'ukuran' | 'konsultasi' | 'notifikasi';
@@ -196,10 +201,13 @@ const DEFAULT_NAIL_DATA: NailSizeData = {
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   menunggu: 'MENUNGGU REVIEW',
+  Antrian: 'MENUNGGU REVIEW',
   proses: 'PROSES DESAIN',
   siap_checkout: 'SIAP CHECKOUT',
+  Disetujui: 'SIAP CHECKOUT',
   selesai: 'SELESAI',
-  dibatalkan: 'DIBATALKAN',
+  dibatalkan: 'DITOLAK',
+  Ditolak: 'DITOLAK',
 };
 
 const TAB_LIST: { key: OrderStatus | 'semua'; label: string }[] = [
@@ -659,6 +667,39 @@ function OrderDetailModal({
           </div>
         )}
 
+        {/* Admin Feedback */}
+        {order.adminFeedback && (
+          <div
+            style={{
+              background: order.status === 'dibatalkan' || order.status === 'Ditolak' ? '#FFF1F2' : '#F0FDF4',
+              border: order.status === 'dibatalkan' || order.status === 'Ditolak' ? '1px solid #FECDD3' : '1px solid #BBF7D0',
+              borderRadius: 12,
+              padding: '14px 16px',
+              marginBottom: 20,
+              fontSize: 13,
+              color: '#141413',
+              lineHeight: 1.5,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: order.status === 'dibatalkan' || order.status === 'Ditolak' ? '#E11D48' : '#16A34A',
+                display: 'block',
+                marginBottom: 4,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}
+            >
+              Feedback dari Nail Artist / Admin:
+            </span>
+            <p style={{ margin: 0, fontWeight: 500 }}>
+              &ldquo;{order.adminFeedback}&rdquo;
+            </p>
+          </div>
+        )}
+
         {/* Price & Action */}
         <div
           style={{
@@ -685,7 +726,7 @@ function OrderDetailModal({
             >
               Tutup
             </button>
-            {order.status === 'siap_checkout' && order.shopeeUrl && (
+            {(order.status === 'siap_checkout' || order.status === 'Disetujui') && order.shopeeUrl && (
               <a
                 href={order.shopeeUrl}
                 target="_blank"
@@ -850,6 +891,23 @@ function OrderCardItem({
               Catatan: &ldquo;{order.notes}&rdquo;
             </p>
           )}
+
+          {order.adminFeedback && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: '8px 12px',
+                borderRadius: 8,
+                background: order.status === 'dibatalkan' || order.status === 'Ditolak' ? '#FFF1F2' : '#F0FDF4',
+                border: order.status === 'dibatalkan' || order.status === 'Ditolak' ? '1px solid #FECDD3' : '1px solid #BBF7D0',
+                fontSize: 12,
+                color: order.status === 'dibatalkan' || order.status === 'Ditolak' ? '#9F1239' : '#166534',
+                lineHeight: 1.4,
+              }}
+            >
+              <strong>Feedback Admin:</strong> &ldquo;{order.adminFeedback}&rdquo;
+            </div>
+          )}
         </div>
 
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -889,7 +947,7 @@ function OrderCardItem({
           Lihat Detail
         </button>
 
-        {order.status === 'siap_checkout' && order.shopeeUrl && (
+        {(order.status === 'siap_checkout' || order.status === 'Disetujui') && order.shopeeUrl && (
           <a
             href={order.shopeeUrl}
             target="_blank"
@@ -1466,7 +1524,12 @@ function KonsultasiTab({
 
   // Filter real-time berdasarkan Tab Status dan Search Bar
   const filtered = orders.filter((o) => {
-    const matchStatus = activeStatus === 'semua' || o.status === activeStatus;
+    const matchStatus =
+      activeStatus === 'semua' ||
+      o.status === activeStatus ||
+      (activeStatus === 'menunggu' && o.status === 'Antrian') ||
+      (activeStatus === 'siap_checkout' && o.status === 'Disetujui') ||
+      (activeStatus === 'dibatalkan' && o.status === 'Ditolak');
     const q = searchQuery.toLowerCase().trim();
     const matchSearch =
       !q ||
@@ -2976,6 +3039,20 @@ function ProfileContent() {
                   }}
                 >
                   → Cek Daftar Harga
+                </Link>
+                <Link
+                  href="/admin"
+                  style={{
+                    display: 'block',
+                    fontSize: 13,
+                    color: '#F37338',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    padding: '5px 0',
+                    transition: 'opacity 0.2s',
+                  }}
+                >
+                  → Dashboard Admin
                 </Link>
               </div>
             </aside>

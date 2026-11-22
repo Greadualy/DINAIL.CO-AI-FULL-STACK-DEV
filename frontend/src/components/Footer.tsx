@@ -410,6 +410,21 @@ export default function Footer() {
               >
                 Panduan Ukuran
               </Link>
+              <span aria-hidden="true" style={{ opacity: 0.7 }}>
+                ·
+              </span>
+              <Link
+                href="/admin"
+                style={{ color: '#F37338', textDecoration: 'none', fontWeight: 600, transition: 'opacity 0.2s' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.75';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                }}
+              >
+                Panel Admin
+              </Link>
             </div>
           </div>
 
