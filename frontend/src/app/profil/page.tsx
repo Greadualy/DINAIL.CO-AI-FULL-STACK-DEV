@@ -78,6 +78,26 @@ function IconCamera({ size = 26 }: { size?: number }) {
   );
 }
 
+function IconAlertTriangle({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+function IconUpload({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+}
+
 function IconSearch({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -114,17 +134,6 @@ function IconBrush({ size = 20 }: { size?: number }) {
   );
 }
 
-function IconEmptyBox({ size = 36 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="16.5" y1="9.4" x2="7.5" y2="4.21" />
-      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-      <line x1="12" y1="22.08" x2="12" y2="12" />
-    </svg>
-  );
-}
-
 export type OrderStatus =
   | 'menunggu'
   | 'proses'
@@ -134,6 +143,10 @@ export type OrderStatus =
 
 export interface OrderCard {
   consultationId: string;
+  userId?: string;
+  customerName?: string;
+  nailSizeSummary?: string;
+  referenceLink?: string;
   submittedAt: string;
   status: OrderStatus;
   serviceType: string;
@@ -217,59 +230,29 @@ const generateConsultationId = (): string => {
   return `DNL-KNS-${dateStr}-${seq}`;
 };
 
-const SEED_ORDERS: OrderCard[] = [
-  {
-    consultationId: 'DNL-KNS-20261114-01',
-    submittedAt: '14 Nov 2026, 09:30',
-    status: 'proses',
-    serviceType: 'Custom Press-On Nails',
-    designName: 'Milky French Classic',
-    variant: 'Hard, Oval - Medium',
-    notes: 'Mohon dibuat tipis dan natural, untuk acara wisuda.',
-    estimasiHarga: 'Rp 99.900',
-    photoUrl: DINAIL_ASSETS.catalogPreviews[0],
-  },
-  {
-    consultationId: 'DNL-KNS-20261115-03',
-    submittedAt: '15 Nov 2026, 14:20',
-    status: 'siap_checkout',
-    serviceType: 'Custom Press-On Nails',
-    designName: 'Blush Chrome Gradient',
-    variant: 'Hard, Coffin - Extra Long',
-    notes: 'Gradient dari blush ke rose gold dengan efek chrome magnetic.',
-    estimasiHarga: 'Rp 134.900',
-    photoUrl: DINAIL_ASSETS.catalogPreviews[2],
-    shopeeUrl: 'https://shopee.co.id/dinail.co',
-  },
-  {
-    consultationId: 'DNL-KNS-20261116-02',
-    submittedAt: '16 Nov 2026, 11:00',
-    status: 'selesai',
-    serviceType: 'Custom Press-On Nails',
-    designName: 'Cat Eye Pink Luxe',
-    variant: 'Hard, Almond - Medium',
-    notes: 'Efek cat eye magnetic, warna pink dusty rose.',
-    estimasiHarga: 'Rp 119.900',
-    photoUrl: DINAIL_ASSETS.catalogPreviews[3],
-  },
-];
+const getOrdersStorageKey = (userId?: string | null): string => {
+  return userId ? `dinail_consultations_${userId}` : 'dinail_consultations_guest';
+};
 
-const LS_KEY_ORDERS = 'dinail_orders';
-const LS_KEY_NAIL_SIZE = 'dinail_nail_sizes';
-
-function loadOrders(): OrderCard[] {
+function loadOrders(userId?: string | null): OrderCard[] {
+  if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(LS_KEY_ORDERS);
+    const key = getOrdersStorageKey(userId);
+    const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw) as OrderCard[];
   } catch { }
   return [];
 }
 
-function saveOrders(orders: OrderCard[]) {
+function saveOrders(orders: OrderCard[], userId?: string | null) {
+  if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(LS_KEY_ORDERS, JSON.stringify(orders));
+    const key = getOrdersStorageKey(userId);
+    localStorage.setItem(key, JSON.stringify(orders));
   } catch { }
 }
+
+const LS_KEY_NAIL_SIZE = 'dinail_nail_sizes';
 
 function loadNailData(): NailSizeData {
   try {
@@ -283,6 +266,34 @@ function saveNailData(data: NailSizeData) {
   try {
     localStorage.setItem(LS_KEY_NAIL_SIZE, JSON.stringify(data));
   } catch { }
+}
+
+function getSavedNailData(): NailSizeData | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(LS_KEY_NAIL_SIZE);
+    if (raw) {
+      const parsed = JSON.parse(raw) as NailSizeData;
+      if (parsed && (parsed.updatedAt || parsed.photoUrl)) {
+        return parsed;
+      }
+    }
+  } catch { }
+  return null;
+}
+
+function formatNailSizeSummary(data: NailSizeData): string {
+  const { preset, leftHand, rightHand } = data;
+  const leftStr = `${leftHand.thumb}-${leftHand.index}-${leftHand.middle}-${leftHand.ring}-${leftHand.pinky} mm`;
+  const rightStr = `${rightHand.thumb}-${rightHand.index}-${rightHand.middle}-${rightHand.ring}-${rightHand.pinky} mm`;
+
+  if (preset !== 'Custom') {
+    return `Size ${preset} (${leftStr})`;
+  }
+  if (leftStr === rightStr) {
+    return `Custom (${leftStr})`;
+  }
+  return `Custom (Kiri: ${leftStr} · Kanan: ${rightStr})`;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -441,8 +452,23 @@ function SubmitConfirmationModal({
           </div>
 
           <div style={{ fontSize: 13, color: '#141413', lineHeight: 1.6 }}>
-            <p><strong>Desain:</strong> {order.designName}</p>
-            <p><strong>Variasi:</strong> {order.variant}</p>
+            {order.customerName && <p><strong>Pemesan:</strong> {order.customerName}</p>}
+            <p><strong>Layanan:</strong> {order.designName}</p>
+            {order.nailSizeSummary && <p><strong>Ukuran Kuku:</strong> {order.nailSizeSummary}</p>}
+            {order.variant && order.variant !== 'Custom' && <p><strong>Variasi:</strong> {order.variant}</p>}
+            {order.referenceLink && (
+              <p style={{ wordBreak: 'break-all' }}>
+                <strong>Link Referensi:</strong>{' '}
+                <a
+                  href={order.referenceLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#F37338', textDecoration: 'underline' }}
+                >
+                  {order.referenceLink}
+                </a>
+              </p>
+            )}
             <p><strong>Status:</strong> <span style={{ color: '#F37338', fontWeight: 600 }}>{STATUS_LABEL[order.status]}</span></p>
           </div>
         </div>
@@ -558,6 +584,7 @@ function OrderDetailModal({
               alt={order.designName}
               width={110}
               height={110}
+              unoptimized={order.photoUrl.startsWith('data:')}
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
             />
           </div>
@@ -568,9 +595,34 @@ function OrderDetailModal({
             <h4 style={{ fontSize: 17, fontWeight: 700, color: '#141413', margin: '2px 0 6px' }}>
               {order.designName}
             </h4>
-            <p style={{ fontSize: 13, color: '#696969', marginBottom: 4 }}>
-              <strong>Variasi:</strong> {order.variant}
-            </p>
+            {order.customerName && (
+              <p style={{ fontSize: 13, color: '#696969', marginBottom: 3 }}>
+                Pemesan: <strong>{order.customerName}</strong>
+              </p>
+            )}
+            {order.nailSizeSummary && (
+              <p style={{ fontSize: 13, color: '#696969', marginBottom: 3 }}>
+                Ukuran: <strong>{order.nailSizeSummary}</strong>
+              </p>
+            )}
+            {order.variant && order.variant !== 'Custom' && (
+              <p style={{ fontSize: 13, color: '#696969', marginBottom: 4 }}>
+                <strong>Variasi:</strong> {order.variant}
+              </p>
+            )}
+            {order.referenceLink && (
+              <p style={{ fontSize: 12, color: '#696969', marginBottom: 4, wordBreak: 'break-all' }}>
+                <strong>Link:</strong>{' '}
+                <a
+                  href={order.referenceLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#F37338', textDecoration: 'underline' }}
+                >
+                  {order.referenceLink}
+                </a>
+              </p>
+            )}
             <div style={{ marginTop: 8 }}>
               <span
                 style={{
@@ -738,6 +790,7 @@ function OrderCardItem({
             alt={order.designName}
             width={80}
             height={80}
+            unoptimized={order.photoUrl.startsWith('data:')}
             style={{ objectFit: 'cover', width: '100%', height: '100%' }}
           />
         </div>
@@ -766,9 +819,21 @@ function OrderCardItem({
           >
             {order.designName}
           </h4>
-          <p style={{ fontSize: 13, color: '#696969', marginBottom: 4 }}>
-            Variasi: <strong>{order.variant}</strong>
-          </p>
+          {order.customerName && (
+            <p style={{ fontSize: 12, color: '#696969', marginBottom: 2 }}>
+              Pemesan: <strong>{order.customerName}</strong>
+            </p>
+          )}
+          {order.nailSizeSummary && (
+            <p style={{ fontSize: 12, color: '#696969', marginBottom: 2 }}>
+              Ukuran: <strong>{order.nailSizeSummary}</strong>
+            </p>
+          )}
+          {order.variant && order.variant !== 'Custom' && (
+            <p style={{ fontSize: 13, color: '#696969', marginBottom: 4 }}>
+              Variasi: <strong>{order.variant}</strong>
+            </p>
+          )}
           {order.notes && (
             <p
               style={{
@@ -938,18 +1003,18 @@ function UkuranKukuTab() {
     setTimeout(() => setSaveSuccess(false), 3500);
   };
 
-  const FINGER_LABELS: { key: keyof NailFingers; label: string; desc: string }[] = [
-    { key: 'thumb', label: 'Ibu Jari', desc: 'Jari 1' },
-    { key: 'index', label: 'Telunjuk', desc: 'Jari 2' },
-    { key: 'middle', label: 'Jari Tengah', desc: 'Jari 3' },
-    { key: 'ring', label: 'Jari Manis', desc: 'Jari 4' },
-    { key: 'pinky', label: 'Kelingking', desc: 'Jari 5' },
+  const FINGERS: { key: keyof NailFingers; label: string }[] = [
+    { key: 'thumb', label: 'Ibu Jari' },
+    { key: 'index', label: 'Telunjuk' },
+    { key: 'middle', label: 'Jari Tengah' },
+    { key: 'ring', label: 'Jari Manis' },
+    { key: 'pinky', label: 'Kelingking' },
   ];
 
   return (
     <div>
       {/* 1. Header Bagian */}
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: '#141413', margin: 0 }}>
           Ukuran Kuku Saya
         </h2>
@@ -958,113 +1023,80 @@ function UkuranKukuTab() {
         </p>
       </div>
 
-      {/* Info Status Ukuran Tersimpan */}
+      {/* Ringkasan Status Ukuran Minimalis */}
       <div
         style={{
-          background: '#FFF7F3',
-          border: '1.5px solid #FDDCC8',
-          borderRadius: 14,
-          padding: '16px 20px',
-          marginBottom: 28,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          gap: 8,
+          paddingBottom: 16,
+          marginBottom: 24,
+          borderBottom: '1px solid #EAE6E1',
+          fontSize: 13,
+          color: '#141413',
           flexWrap: 'wrap',
-          gap: 12,
         }}
       >
-        <div>
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', textTransform: 'uppercase' }}>
-            STATUS UKURAN TERSIMPAN
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: '#141413' }}>
-              {nailData.preset === 'Custom' ? 'Ukuran Kustom Mandiri' : `Size Preset ${nailData.preset}`}
-            </span>
-            <span
-              style={{
-                fontSize: 12,
-                color: '#F37338',
-                fontFamily: 'monospace',
-                fontWeight: 600,
-              }}
-            >
-              ({nailData.leftHand.thumb}-{nailData.leftHand.index}-{nailData.leftHand.middle}-{nailData.leftHand.ring}-{nailData.leftHand.pinky} mm)
-            </span>
-          </div>
-          {nailData.updatedAt && (
-            <p style={{ fontSize: 11, color: '#696969', margin: '3px 0 0' }}>
-              Terakhir diperbarui: {nailData.updatedAt}
-            </p>
-          )}
-        </div>
-
         <span
           style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: '#16A34A',
-            background: '#F0FDF4',
-            padding: '5px 12px',
-            borderRadius: 999,
-            border: '1px solid #BBF7D0',
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            backgroundColor: '#F37338',
+            display: 'inline-block',
+            flexShrink: 0,
           }}
-        >
-          ✓ DATA AKTIF DIGUNAKAN
+        />
+        <span style={{ color: '#696969' }}>Ukuran aktif:</span>
+        <span style={{ fontWeight: 600 }}>
+          {nailData.preset === 'Custom' ? 'Kustom' : `Size ${nailData.preset}`} ({nailData.leftHand.thumb}-{nailData.leftHand.index}-{nailData.leftHand.middle}-{nailData.leftHand.ring}-{nailData.leftHand.pinky} mm)
         </span>
+        {nailData.updatedAt && (
+          <span style={{ fontSize: 12, color: '#767676', marginLeft: 'auto' }}>
+            Diperbarui {nailData.updatedAt}
+          </span>
+        )}
       </div>
 
-      {/* 2. Pilihan Preset Cepat */}
+      {/* 2. Pilihan Preset Cepat (Flat Minimalis) */}
       <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <label style={{ fontSize: 13, fontWeight: 700, color: '#141413' }}>
-            Pilih Estimasi Preset Cepat
-          </label>
-          <span style={{ fontSize: 12, color: '#767676' }}>
-            Klik salah satu untuk mengisi otomatis
-          </span>
-        </div>
-
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {(['XS', 'S', 'M', 'L', 'Custom'] as const).map((sz) => {
             const isSelected = nailData.preset === sz;
-            const subtitle = sz !== 'Custom'
-              ? `${SIZE_PRESETS[sz].thumb}/${SIZE_PRESETS[sz].index}/${SIZE_PRESETS[sz].middle}/${SIZE_PRESETS[sz].ring}/${SIZE_PRESETS[sz].pinky}mm`
-              : 'Manual';
-
             return (
               <button
                 key={sz}
                 type="button"
                 onClick={() => handleSelectPreset(sz)}
                 style={{
-                  padding: '9px 16px',
-                  borderRadius: 12,
-                  border: isSelected ? '1.5px solid #F37338' : '1px solid #EAE6E1',
-                  background: isSelected ? '#FFF7F3' : '#FFFFFF',
-                  color: isSelected ? '#F37338' : '#141413',
+                  padding: '7px 16px',
+                  borderRadius: 20,
+                  border: isSelected ? '1px solid #141413' : '1px solid #E5E2DC',
+                  background: isSelected ? '#141413' : 'transparent',
+                  color: isSelected ? '#FFFFFF' : '#555555',
                   fontSize: 13,
-                  fontWeight: isSelected ? 700 : 500,
+                  fontWeight: isSelected ? 600 : 400,
                   cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
+                  fontFamily: 'inherit',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 2,
-                  transition: 'all 0.2s ease',
-                  minWidth: 90,
+                  gap: 6,
+                  transition: 'all 0.15s ease',
                 }}
               >
-                <span>Size {sz}</span>
-                <span style={{ fontSize: 10, color: isSelected ? '#F37338' : '#767676' }}>
-                  {subtitle}
-                </span>
+                <span>{sz === 'Custom' ? 'Kustom' : `Size ${sz}`}</span>
+                {sz !== 'Custom' && (
+                  <span style={{ fontSize: 11, opacity: isSelected ? 0.8 : 0.6 }}>
+                    {SIZE_PRESETS[sz].thumb}/{SIZE_PRESETS[sz].index}/{SIZE_PRESETS[sz].middle}/{SIZE_PRESETS[sz].ring}/{SIZE_PRESETS[sz].pinky}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* 3. Detail Ukuran Tiap Jari (Kiri & Kanan) */}
+      {/* 3. Detail Ukuran Per Jari (Tabel / List Flat 2 Kolom) */}
       <div style={{ marginBottom: 32 }}>
         <div
           style={{
@@ -1076,9 +1108,9 @@ function UkuranKukuTab() {
             gap: 10,
           }}
         >
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#141413', margin: 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', color: '#141413', textTransform: 'uppercase' }}>
             Detail Ukuran Lebar Kuku Per Jari (Milimeter)
-          </h3>
+          </span>
 
           <label
             style={{
@@ -1086,7 +1118,7 @@ function UkuranKukuTab() {
               alignItems: 'center',
               gap: 8,
               fontSize: 12,
-              fontWeight: 600,
+              fontWeight: 500,
               color: '#141413',
               cursor: 'pointer',
             }}
@@ -1095,7 +1127,7 @@ function UkuranKukuTab() {
               type="checkbox"
               checked={nailData.syncHands}
               onChange={(e) => handleToggleSync(e.target.checked)}
-              style={{ accentColor: '#F37338', width: 16, height: 16 }}
+              style={{ accentColor: '#F37338', width: 15, height: 15 }}
             />
             <span>Samakan Tangan Kanan dengan Kiri</span>
           </label>
@@ -1105,45 +1137,32 @@ function UkuranKukuTab() {
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 20,
+            gap: 36,
           }}
         >
-          {/* Card Tangan Kiri */}
-          <div
-            style={{
-              background: '#FFFFFF',
-              border: '1px solid #EAE6E1',
-              borderRadius: 16,
-              padding: '20px',
-            }}
-          >
-            <div style={{ marginBottom: 16 }}>
-              <h4 style={{ fontSize: 14, fontWeight: 700, color: '#141413', margin: 0 }}>
-                Tangan Kiri (Left Hand)
-              </h4>
+          {/* Kolom Tangan Kiri */}
+          <div>
+            <div style={{ paddingBottom: 8, borderBottom: '1px solid #141413', marginBottom: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#141413' }}>
+                Tangan Kiri
+              </span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {FINGER_LABELS.map((f) => (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {FINGERS.map((f) => (
                 <div
                   key={f.key}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    borderRadius: 10,
-                    background: '#F3F0EE',
+                    padding: '12px 0',
+                    borderBottom: '1px solid #EAE6E1',
                   }}
                 >
-                  <div>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#141413' }}>
-                      {f.label}
-                    </span>
-                    <span style={{ fontSize: 11, color: '#767676', marginLeft: 6 }}>
-                      ({f.desc})
-                    </span>
-                  </div>
+                  <span style={{ fontSize: 13, color: '#141413', fontWeight: 500 }}>
+                    {f.label}
+                  </span>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input
@@ -1153,69 +1172,50 @@ function UkuranKukuTab() {
                       value={nailData.leftHand[f.key]}
                       onChange={(e) => handleFingerChange('leftHand', f.key, Number(e.target.value))}
                       style={{
-                        width: 54,
-                        padding: '6px 8px',
-                        fontSize: 13,
-                        fontWeight: 700,
-                        textAlign: 'center',
-                        border: '1px solid #D1CDC7',
-                        borderRadius: 8,
-                        background: '#FFFFFF',
+                        width: 48,
+                        padding: '4px 0',
+                        fontSize: 14,
+                        fontWeight: 600,
+                        textAlign: 'right',
+                        border: 'none',
+                        borderBottom: '1px solid #D5D0C8',
+                        background: 'transparent',
                         color: '#141413',
                         outline: 'none',
+                        borderRadius: 0,
+                        fontFamily: 'inherit',
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#696969', fontWeight: 600 }}>mm</span>
+                    <span style={{ fontSize: 12, color: '#767676' }}>mm</span>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Card Tangan Kanan */}
-          <div
-            style={{
-              background: '#FFFFFF',
-              border: '1px solid #EAE6E1',
-              borderRadius: 16,
-              padding: '20px',
-              opacity: nailData.syncHands ? 0.85 : 1,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div>
-                <h4 style={{ fontSize: 14, fontWeight: 700, color: '#141413', margin: 0 }}>
-                  Tangan Kanan (Right Hand)
-                </h4>
-              </div>
-              {nailData.syncHands && (
-                <span style={{ fontSize: 11, color: '#F37338', fontWeight: 600 }}>
-                  (Disamakan dengan Kiri)
-                </span>
-              )}
+          {/* Kolom Tangan Kanan */}
+          <div style={{ opacity: nailData.syncHands ? 0.45 : 1, transition: 'opacity 0.2s ease' }}>
+            <div style={{ paddingBottom: 8, borderBottom: '1px solid #141413', marginBottom: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#141413' }}>
+                Tangan Kanan
+              </span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {FINGER_LABELS.map((f) => (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {FINGERS.map((f) => (
                 <div
                   key={f.key}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    borderRadius: 10,
-                    background: '#F3F0EE',
+                    padding: '12px 0',
+                    borderBottom: '1px solid #EAE6E1',
                   }}
                 >
-                  <div>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#141413' }}>
-                      {f.label}
-                    </span>
-                    <span style={{ fontSize: 11, color: '#767676', marginLeft: 6 }}>
-                      ({f.desc})
-                    </span>
-                  </div>
+                  <span style={{ fontSize: 13, color: '#141413', fontWeight: 500 }}>
+                    {f.label}
+                  </span>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input
@@ -1226,20 +1226,22 @@ function UkuranKukuTab() {
                       disabled={nailData.syncHands}
                       onChange={(e) => handleFingerChange('rightHand', f.key, Number(e.target.value))}
                       style={{
-                        width: 54,
-                        padding: '6px 8px',
-                        fontSize: 13,
-                        fontWeight: 700,
-                        textAlign: 'center',
-                        border: '1px solid #D1CDC7',
-                        borderRadius: 8,
-                        background: nailData.syncHands ? '#F3F0EE' : '#FFFFFF',
-                        color: nailData.syncHands ? '#767676' : '#141413',
+                        width: 48,
+                        padding: '4px 0',
+                        fontSize: 14,
+                        fontWeight: 600,
+                        textAlign: 'right',
+                        border: 'none',
+                        borderBottom: '1px solid #D5D0C8',
+                        background: 'transparent',
+                        color: '#141413',
                         outline: 'none',
+                        borderRadius: 0,
+                        fontFamily: 'inherit',
                         cursor: nailData.syncHands ? 'not-allowed' : 'text',
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#696969', fontWeight: 600 }}>mm</span>
+                    <span style={{ fontSize: 12, color: '#767676' }}>mm</span>
                   </div>
                 </div>
               ))}
@@ -1248,33 +1250,13 @@ function UkuranKukuTab() {
         </div>
       </div>
 
-      {/* 4. Panduan & Unggah Foto Pengecekan Ukuran Kuku */}
-      <div
-        style={{
-          background: '#FFFFFF',
-          border: '1px solid #EAE6E1',
-          borderRadius: 18,
-          padding: '24px',
-          marginBottom: 32,
-        }}
-      >
+      {/* 4. Pengecekan Ukuran Kuku via Foto */}
+      <div style={{ marginTop: 40, paddingTop: 32, borderTop: '1px solid #EAE6E1' }}>
         <div style={{ marginBottom: 20 }}>
-          <p
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: '#F37338',
-              marginBottom: 4,
-            }}
-          >
-            VERIFIKASI AKURASI
-          </p>
-          <h3 style={{ fontSize: 17, fontWeight: 700, color: '#141413', margin: 0 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#141413', margin: 0 }}>
             Pengecekan Ukuran Kuku via Foto
           </h3>
-          <p style={{ fontSize: 13, color: '#696969', marginTop: 4 }}>
+          <p style={{ fontSize: 13, color: '#696969', marginTop: 4, lineHeight: 1.5 }}>
             Unggah foto kuku Anda bersama koin pecahan Rp 500 atau penggaris agar nail artist kami dapat memverifikasi skala kelengkungan dan ukuran kuku asli secara presisi.
           </p>
         </div>
@@ -1283,79 +1265,61 @@ function UkuranKukuTab() {
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 24,
-            alignItems: 'center',
+            gap: 36,
+            alignItems: 'start',
           }}
         >
           {/* Panduan Foto */}
-          <div
-            style={{
-              background: '#F3F0EE',
-              borderRadius: 14,
-              padding: '20px',
-            }}
-          >
-            <h4 style={{ fontSize: 14, fontWeight: 700, color: '#141413', marginBottom: 12 }}>
+          <div>
+            <h4 style={{ fontSize: 13, fontWeight: 600, color: '#141413', marginBottom: 14 }}>
               Panduan Pengambilan Foto Presisi:
             </h4>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, color: '#444444' }}>
-              <li style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ color: '#F37338', fontWeight: 700 }}>1.</span>
-                <span>Posisikan jari tangan mendatar di atas permukaan meja yang rata.</span>
-              </li>
-              <li style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ color: '#F37338', fontWeight: 700 }}>2.</span>
-                <span>Letakkan <strong>koin Rp 500</strong> atau penggaris tepat di samping kuku sebagai pembanding skala.</span>
-              </li>
-              <li style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ color: '#F37338', fontWeight: 700 }}>3.</span>
-                <span>Ambil foto tegak lurus (90 derajat tepat dari atas kuku).</span>
-              </li>
-              <li style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ color: '#F37338', fontWeight: 700 }}>4.</span>
-                <span>Pastikan pencahayaan terang dan foto tidak buram (*blurry*).</span>
-              </li>
-            </ul>
+            <ol style={{ paddingLeft: 18, margin: 0, display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, color: '#555555', lineHeight: 1.5 }}>
+              <li>Posisikan jari tangan mendatar di atas permukaan meja yang rata.</li>
+              <li>Letakkan <strong>koin Rp 500</strong> atau penggaris tepat di samping kuku sebagai pembanding skala.</li>
+              <li>Ambil foto tegak lurus (90 derajat tepat dari atas kuku).</li>
+              <li>Pastikan pencahayaan terang dan foto tidak buram (buram).</li>
+            </ol>
           </div>
 
           {/* Area Upload Foto */}
           <div
             style={{
-              border: '2px dashed #D1CDC7',
-              borderRadius: 16,
-              padding: '24px',
+              border: '1px dashed #D5D0C8',
+              borderRadius: 14,
+              padding: '24px 20px',
               textAlign: 'center',
-              backgroundColor: '#FAFAFA',
+              background: 'transparent',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              minHeight: 200,
+              minHeight: 180,
             }}
           >
             {nailData.photoUrl ? (
               <div>
                 <div
                   style={{
-                    width: 130,
-                    height: 130,
-                    borderRadius: 14,
+                    width: 120,
+                    height: 120,
+                    borderRadius: 12,
                     overflow: 'hidden',
                     position: 'relative',
                     margin: '0 auto 12px',
-                    boxShadow: '0 8px 20px rgba(0,0,0,0.1)',
+                    border: '1px solid #EAE6E1',
                   }}
                 >
                   <Image
                     src={nailData.photoUrl}
                     alt="Pratinjau Foto Ukuran Kuku"
-                    width={130}
-                    height={130}
+                    width={120}
+                    height={120}
                     style={{ objectFit: 'cover', width: '100%', height: '100%' }}
                   />
                 </div>
                 <p style={{ fontSize: 13, color: '#16A34A', fontWeight: 600, marginBottom: 8 }}>
-                  ✓ Foto Ukuran Kuku Berhasil Diunggah
+                  Foto Ukuran Kuku Berhasil Diunggah
                 </p>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
                   <button
@@ -1365,7 +1329,7 @@ function UkuranKukuTab() {
                       background: 'none',
                       border: 'none',
                       fontSize: 12,
-                      color: '#F37338',
+                      color: '#141413',
                       fontWeight: 600,
                       cursor: 'pointer',
                       textDecoration: 'underline',
@@ -1373,7 +1337,7 @@ function UkuranKukuTab() {
                   >
                     Ganti Foto
                   </button>
-                  <span style={{ color: '#D1CDC7' }}>·</span>
+                  <span style={{ color: '#D5D0C8' }}>·</span>
                   <button
                     type="button"
                     onClick={handleRemovePhoto}
@@ -1392,10 +1356,10 @@ function UkuranKukuTab() {
               </div>
             ) : (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10, color: '#141413' }}>
-                  <IconCamera size={32} />
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: '#767676' }}>
+                  <IconCamera size={26} />
                 </div>
-                <p style={{ fontWeight: 700, fontSize: 14, color: '#141413', marginBottom: 4 }}>
+                <p style={{ fontWeight: 600, fontSize: 13, color: '#141413', marginBottom: 2 }}>
                   Unggah Foto Jari &amp; Kuku Anda
                 </p>
                 <p style={{ fontSize: 12, color: '#767676', marginBottom: 14 }}>
@@ -1404,8 +1368,17 @@ function UkuranKukuTab() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="btn-secondary"
-                  style={{ padding: '8px 20px', fontSize: 13 }}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid #D5D0C8',
+                    borderRadius: 8,
+                    padding: '7px 16px',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: '#141413',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
                 >
                   Pilih File Foto
                 </button>
@@ -1424,39 +1397,36 @@ function UkuranKukuTab() {
       </div>
 
       {/* 5. Tombol Simpan & Alert Feedback */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ marginTop: 36, paddingTop: 24, borderTop: '1px solid #EAE6E1' }}>
         {saveSuccess && (
           <div
             style={{
               background: '#F0FDF4',
               border: '1px solid #BBF7D0',
-              borderRadius: 12,
-              padding: '12px 18px',
+              borderRadius: 10,
+              padding: '10px 16px',
               fontSize: 13,
               color: '#15803D',
               fontWeight: 600,
-              display: 'flex',
+              marginBottom: 16,
+              display: 'inline-flex',
               alignItems: 'center',
               gap: 8,
             }}
           >
-            <span>✓</span>
-            <span>Data ukuran kuku dan foto berhasil disimpan ke profil Anda! Ukuran ini akan otomatis digunakan saat konsultasi.</span>
+            <span>✓ Data ukuran kuku dan foto berhasil disimpan ke profil Anda!</span>
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div>
           <button
             type="button"
             className="btn-primary"
-            style={{ padding: '13px 32px', fontSize: 14, fontWeight: 600 }}
+            style={{ padding: '12px 30px', fontSize: 14, fontWeight: 600 }}
             onClick={handleSave}
           >
             Simpan Ukuran Kuku
           </button>
-          <span style={{ fontSize: 12, color: '#767676' }}>
-            Data tersimpan aman di browser Anda
-          </span>
         </div>
       </div>
     </div>
@@ -1464,27 +1434,31 @@ function UkuranKukuTab() {
 }
 
 function KonsultasiTab({
+  userId,
+  userProfileName,
   initialDesign,
+  onNavigateToUkuran,
 }: {
+  userId?: string | null;
+  userProfileName?: string;
   initialDesign?: string;
+  onNavigateToUkuran?: () => void;
 }) {
   const [activeStatus, setActiveStatus] = useState<OrderStatus | 'semua'>('semua');
   const [searchQuery, setSearchQuery] = useState('');
-  const [orders, setOrders] = useState<OrderCard[]>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = loadOrders();
-      if (stored.length > 0) return stored;
-      saveOrders(SEED_ORDERS);
-      return SEED_ORDERS;
-    }
-    return SEED_ORDERS;
-  });
+  const [orders, setOrders] = useState<OrderCard[]>(() => loadOrders(userId));
   const [showNewForm, setShowNewForm] = useState(Boolean(initialDesign));
 
   // Form states
-  const [newDesign, setNewDesign] = useState(initialDesign || '');
-  const [newVariant, setNewVariant] = useState('Hard, Almond - Medium');
+  const [customerName, setCustomerName] = useState(userProfileName || 'Sari Dewi');
   const [newNotes, setNewNotes] = useState('');
+  const [refLink, setRefLink] = useState('');
+  const [refPhotoUrl, setRefPhotoUrl] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const refFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Saved nail size state
+  const [savedNailData, setSavedNailData] = useState<NailSizeData | null>(() => getSavedNailData());
 
   // Modals state
   const [submittedOrder, setSubmittedOrder] = useState<OrderCard | null>(null);
@@ -1503,8 +1477,40 @@ function KonsultasiTab({
     return matchStatus && matchSearch;
   });
 
+  const handleRefFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Ukuran file maksimal 5 MB');
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setUploadError('Format file harus berupa JPG, PNG, atau WEBP');
+      return;
+    }
+
+    setUploadError(null);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        setRefPhotoUrl(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveRefPhoto = () => {
+    setRefPhotoUrl(null);
+    setUploadError(null);
+    if (refFileInputRef.current) {
+      refFileInputRef.current.value = '';
+    }
+  };
+
   const handleSubmitNew = () => {
-    if (!newDesign.trim()) return;
+    if (!customerName.trim() || !savedNailData) return;
 
     const newId = generateConsultationId();
     const now = new Date();
@@ -1520,27 +1526,33 @@ function KonsultasiTab({
 
     const newOrder: OrderCard = {
       consultationId: newId,
+      userId: userId || undefined,
+      customerName: customerName.trim(),
+      nailSizeSummary: formatNailSizeSummary(savedNailData),
+      referenceLink: refLink.trim() || undefined,
       submittedAt: `${dateLabel}, ${timeLabel}`,
       status: 'menunggu',
       serviceType: 'Custom Press-On Nails',
-      designName: newDesign.trim(),
-      variant: newVariant.trim(),
+      designName: initialDesign?.trim() || 'Custom Press-On Nails',
+      variant: 'Custom',
       notes: newNotes.trim(),
       estimasiHarga: 'Menunggu estimasi',
-      photoUrl: DINAIL_ASSETS.catalogPreviews[0],
+      photoUrl: refPhotoUrl || DINAIL_ASSETS.catalogPreviews[0],
     };
 
     const updated = [newOrder, ...orders];
     setOrders(updated);
-    saveOrders(updated);
+    saveOrders(updated, userId);
 
     // Open confirmation modal
     setSubmittedOrder(newOrder);
 
     // Reset form
     setShowNewForm(false);
-    setNewDesign('');
     setNewNotes('');
+    setRefLink('');
+    setRefPhotoUrl(null);
+    if (refFileInputRef.current) refFileInputRef.current.value = '';
     setActiveStatus('menunggu');
   };
 
@@ -1569,7 +1581,10 @@ function KonsultasiTab({
         <button
           className="btn-primary"
           style={{ padding: '10px 22px', fontSize: 13 }}
-          onClick={() => setShowNewForm((v) => !v)}
+          onClick={() => {
+            setSavedNailData(getSavedNailData());
+            setShowNewForm((v) => !v);
+          }}
         >
           {showNewForm ? '✕ Tutup Form' : '+ Konsultasi Desain Baru'}
         </button>
@@ -1587,25 +1602,43 @@ function KonsultasiTab({
             boxShadow: '0 8px 24px rgba(243, 115, 56, 0.08)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: '#141413', margin: 0 }}>
               Formulir Pengajuan Konsultasi Kuku
             </h3>
-            <span style={{ fontSize: 12, color: '#F37338', fontWeight: 600 }}>
-              ID Otomatis Digenerate
-            </span>
+            <button
+              type="button"
+              onClick={() => setShowNewForm(false)}
+              aria-label="Tutup Form"
+              style={{
+                background: '#F3F0EE',
+                border: 'none',
+                borderRadius: '50%',
+                width: 28,
+                height: 28,
+                cursor: 'pointer',
+                fontSize: 14,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#696969',
+              }}
+            >
+              ✕
+            </button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* 1. Field Nama Pemesan */}
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 5 }}>
-                Nama Desain / Referensi Gaya *
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 6 }}>
+                Nama Lengkap Pemesan *
               </label>
               <input
                 type="text"
-                placeholder="Contoh: Milky French Classic, Blush Chrome Gradient..."
-                value={newDesign}
-                onChange={(e) => setNewDesign(e.target.value)}
+                placeholder="Nama pemesan..."
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '11px 14px',
@@ -1620,31 +1653,240 @@ function KonsultasiTab({
               />
             </div>
 
+            {/* 2. Bagian Ukuran Kuku Tersimpan (Prerequisite) */}
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 5 }}>
-                Variasi Kuku (Bentuk &amp; Panjang)
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 6 }}>
+                Ukuran Kuku Tersimpan *
               </label>
-              <input
-                type="text"
-                placeholder="Contoh: Hard, Almond - Medium atau Oval - Short"
-                value={newVariant}
-                onChange={(e) => setNewVariant(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '11px 14px',
-                  fontSize: 13,
-                  border: '1px solid #EAE6E1',
-                  borderRadius: 10,
-                  background: '#F3F0EE',
-                  color: '#141413',
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
-              />
+              {savedNailData ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 16px',
+                    backgroundColor: '#F3F0EE',
+                    borderRadius: 10,
+                    border: '1px solid #EAE6E1',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: '#F37338',
+                        display: 'inline-block',
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span style={{ fontSize: 13, color: '#141413', fontWeight: 600 }}>
+                      Ukuran aktif:
+                    </span>
+                    <span style={{ fontSize: 13, color: '#141413' }}>
+                      {formatNailSizeSummary(savedNailData)}
+                    </span>
+                  </div>
+                  {onNavigateToUkuran && (
+                    <button
+                      type="button"
+                      onClick={onNavigateToUkuran}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: '#F37338',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontFamily: 'inherit',
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      Ubah Ukuran
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    border: '1.5px solid #F37338',
+                    backgroundColor: '#FFF7F3',
+                    borderRadius: 12,
+                    padding: '14px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 14,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 240 }}>
+                    <span style={{ color: '#F37338', flexShrink: 0, display: 'inline-flex' }}>
+                      <IconAlertTriangle size={20} />
+                    </span>
+                    <p style={{ fontSize: 13, color: '#141413', margin: 0, lineHeight: 1.5 }}>
+                      Anda belum menyimpan ukuran kuku. Silakan lakukan pengukuran kuku terlebih dahulu sebelum mengajukan konsultasi.
+                    </p>
+                  </div>
+                  {onNavigateToUkuran && (
+                    <button
+                      type="button"
+                      onClick={onNavigateToUkuran}
+                      className="btn-primary"
+                      style={{
+                        padding: '8px 18px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Ukur Kuku Sekarang →
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
+            {/* 3. Bagian Referensi Desain (Link & Upload File) */}
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 5 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 6 }}>
+                Referensi Desain (Link &amp; Upload File)
+              </label>
+
+              {/* Opsi 1: Link URL */}
+              <div style={{ marginBottom: 12 }}>
+                <input
+                  type="url"
+                  placeholder="Tempel link Pinterest, Instagram, atau referensi lainnya (opsional)"
+                  value={refLink}
+                  onChange={(e) => setRefLink(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px',
+                    fontSize: 13,
+                    border: '1px solid #EAE6E1',
+                    borderRadius: 10,
+                    background: '#F3F0EE',
+                    color: '#141413',
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                  }}
+                />
+              </div>
+
+              {/* Opsi 2: Upload File Gambar */}
+              <div
+                style={{
+                  border: '1px dashed #D5D0C8',
+                  borderRadius: 12,
+                  padding: '18px 20px',
+                  textAlign: 'center',
+                  background: 'transparent',
+                }}
+              >
+                {refPhotoUrl ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div
+                        style={{
+                          width: 64,
+                          height: 64,
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          flexShrink: 0,
+                          border: '1px solid #EAE6E1',
+                          background: '#F3F0EE',
+                        }}
+                      >
+                        <Image
+                          src={refPhotoUrl}
+                          alt="Thumbnail Referensi"
+                          width={64}
+                          height={64}
+                          unoptimized
+                          style={{ objectFit: 'cover', width: '100%', height: '100%' }}
+                        />
+                      </div>
+                      <div style={{ textAlign: 'left' }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: '#16A34A', margin: 0 }}>
+                          Foto referensi berhasil diunggah
+                        </p>
+                        <p style={{ fontSize: 11, color: '#767676', margin: '2px 0 0' }}>
+                          Format gambar tersimpan
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemoveRefPhoto}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: 12,
+                        color: '#DC2626',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        padding: '6px 12px',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6, color: '#767676' }}>
+                      <IconUpload size={22} />
+                    </div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#141413', margin: '0 0 2px' }}>
+                      Unggah File Gambar Referensi
+                    </p>
+                    <p style={{ fontSize: 11, color: '#767676', margin: '0 0 10px' }}>
+                      JPG, PNG, atau WEBP (Maks. 5 MB)
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => refFileInputRef.current?.click()}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid #D5D0C8',
+                        borderRadius: 8,
+                        padding: '6px 16px',
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: '#141413',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      Pilih File Gambar
+                    </button>
+                  </div>
+                )}
+
+                <input
+                  ref={refFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleRefFileUpload}
+                  style={{ display: 'none' }}
+                />
+              </div>
+
+              {uploadError && (
+                <p style={{ fontSize: 12, color: '#DC2626', marginTop: 6, margin: '6px 0 0' }}>
+                  {uploadError}
+                </p>
+              )}
+            </div>
+
+            {/* 4. Catatan Tambahan / Preferensi */}
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 6 }}>
                 Catatan Tambahan / Preferensi
               </label>
               <textarea
@@ -1667,8 +1909,10 @@ function KonsultasiTab({
               />
             </div>
 
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            {/* Footer Buttons */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
               <button
+                type="button"
                 className="btn-secondary"
                 style={{ padding: '9px 20px', fontSize: 13 }}
                 onClick={() => setShowNewForm(false)}
@@ -1676,10 +1920,16 @@ function KonsultasiTab({
                 Batal
               </button>
               <button
+                type="button"
                 className="btn-primary"
-                style={{ padding: '9px 24px', fontSize: 13 }}
+                style={{
+                  padding: '9px 24px',
+                  fontSize: 13,
+                  opacity: (!savedNailData || !customerName.trim()) ? 0.5 : 1,
+                  cursor: (!savedNailData || !customerName.trim()) ? 'not-allowed' : 'pointer',
+                }}
                 onClick={handleSubmitNew}
-                disabled={!newDesign.trim()}
+                disabled={!savedNailData || !customerName.trim()}
               >
                 Kirim Pengajuan Konsultasi →
               </button>
@@ -1776,34 +2026,55 @@ function KonsultasiTab({
         <div
           style={{
             textAlign: 'center',
-            padding: '54px 20px',
+            padding: '60px 24px',
             color: '#696969',
             fontSize: 14,
             background: '#FFFFFF',
-            borderRadius: 16,
+            borderRadius: 18,
             border: '1px solid #EAE6E1',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16, color: '#D1CDC7' }}>
-            <IconEmptyBox size={40} />
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              background: '#FFF7F3',
+              border: '1.5px solid #FDDCC8',
+              color: '#F37338',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 18px',
+            }}
+          >
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <line x1="9" y1="15" x2="15" y2="15" />
+            </svg>
           </div>
-          <p style={{ fontWeight: 700, color: '#141413', fontSize: 16, marginBottom: 6 }}>
-            Tidak ada riwayat konsultasi
+          <p style={{ fontWeight: 700, color: '#141413', fontSize: 18, marginBottom: 8 }}>
+            Belum ada riwayat konsultasi
           </p>
-          <p style={{ maxWidth: 380, margin: '0 auto 20px', lineHeight: 1.5 }}>
+          <p style={{ maxWidth: 440, margin: '0 auto 24px', lineHeight: 1.55, fontSize: 13, color: '#696969' }}>
             {searchQuery
-              ? `Tidak ditemukan hasil yang cocok dengan "${searchQuery}".`
-              : 'Belum ada pesanan pada kategori status ini. Mulai ajukan desain kuku kustom Anda sekarang!'}
+              ? `Tidak ditemukan riwayat konsultasi yang cocok dengan kata kunci "${searchQuery}".`
+              : activeStatus !== 'semua'
+              ? `Belum ada pesanan pada status "${STATUS_LABEL[activeStatus]}". Mulai konsultasi desain kuku impianmu untuk mendapatkan rekomendasi tier, bentuk, dan estimasi harga.`
+              : 'Mulai konsultasi desain kuku impianmu untuk mendapatkan rekomendasi tier, bentuk, dan estimasi harga.'}
           </p>
-          {!showNewForm && (
-            <button
-              className="btn-primary"
-              style={{ padding: '10px 24px', fontSize: 13 }}
-              onClick={() => setShowNewForm(true)}
-            >
-              + Konsultasi Baru Sekarang
-            </button>
-          )}
+          <button
+            className="btn-primary"
+            style={{ padding: '12px 28px', fontSize: 14 }}
+            onClick={() => {
+              setSavedNailData(getSavedNailData());
+              setShowNewForm(true);
+            }}
+          >
+            + Mulai Konsultasi
+          </button>
         </div>
       ) : (
         filtered.map((order) => (
@@ -1834,23 +2105,402 @@ function KonsultasiTab({
   );
 }
 
-function AkunTab({
-  currentUser,
-  userId,
-}: {
-  currentUser: { name: string; email: string } | null;
-  userId: string | null;
-}) {
-  const [name, setName] = useState(currentUser?.name || 'Sari Dewi');
-  const [phone, setPhone] = useState('081298765432');
-  const [city, setCity] = useState('Yogyakarta');
-  const [saved, setSaved] = useState(false);
+interface UserProfile {
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+}
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+const LS_KEY_PROFILE = 'dinail_user_profile';
+
+const loadProfile = (fallbackUser: { name: string; email: string; phone?: string | null } | null): UserProfile => {
+  const defaultProfile: UserProfile = {
+    name: fallbackUser?.name || 'Sari Dewi',
+    email: fallbackUser?.email || 'sari@example.com',
+    phone: fallbackUser?.phone || '081298765432',
+    city: 'Yogyakarta',
   };
 
+  if (typeof window === 'undefined') return defaultProfile;
+
+  try {
+    const raw = localStorage.getItem(LS_KEY_PROFILE);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        name: parsed.name || defaultProfile.name,
+        email: fallbackUser?.email || parsed.email || defaultProfile.email,
+        phone: parsed.phone || defaultProfile.phone,
+        city: parsed.city || defaultProfile.city,
+      };
+    }
+  } catch { }
+  return defaultProfile;
+};
+
+const saveProfile = (profile: UserProfile) => {
+  try {
+    localStorage.setItem(LS_KEY_PROFILE, JSON.stringify(profile));
+  } catch { }
+};
+
+function EditProfileModal({
+  isOpen,
+  profile,
+  onClose,
+  onSave,
+}: {
+  isOpen: boolean;
+  profile: UserProfile;
+  onClose: () => void;
+  onSave: (updated: { name: string; phone: string; city: string }) => void;
+}) {
+  const [mode, setMode] = useState<'edit' | 'confirm'>('edit');
+  const [draftName, setDraftName] = useState(profile.name);
+  const [draftPhone, setDraftPhone] = useState(profile.phone);
+  const [draftCity, setDraftCity] = useState(profile.city);
+  const [nameError, setNameError] = useState('');
+
+  if (!isOpen) return null;
+
+  const handleProceedToConfirm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draftName.trim()) {
+      setNameError('Nama lengkap wajib diisi');
+      return;
+    }
+    setNameError('');
+    setMode('confirm');
+  };
+
+  const handleConfirmSave = () => {
+    onSave({
+      name: draftName.trim(),
+      phone: draftPhone.trim(),
+      city: draftCity.trim(),
+    });
+  };
+
+  const handleCancel = () => {
+    setMode('edit');
+    setNameError('');
+    onClose();
+  };
+
+  return (
+    <div
+      onClick={handleCancel}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10001,
+        backgroundColor: 'rgba(20, 20, 19, 0.45)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 20,
+          padding: '28px 28px 24px',
+          maxWidth: 480,
+          width: '100%',
+          boxShadow: '0 24px 48px rgba(0, 0, 0, 0.16)',
+          position: 'relative',
+        }}
+      >
+        {mode === 'edit' ? (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#141413', margin: 0 }}>
+                  Ubah Profil
+                </h3>
+                <p style={{ fontSize: 13, color: '#696969', marginTop: 4, margin: 0 }}>
+                  Perbarui informasi kontak dan data diri akun Anda
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancel}
+                aria-label="Tutup"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  color: '#767676',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 6,
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleProceedToConfirm} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 6 }}>
+                  Nama Lengkap <span style={{ color: '#F37338' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={draftName}
+                  onChange={(e) => {
+                    setDraftName(e.target.value);
+                    if (nameError) setNameError('');
+                  }}
+                  placeholder="Masukkan nama lengkap"
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px',
+                    fontSize: 14,
+                    border: nameError ? '1.5px solid #EF4444' : '1px solid #EAE6E1',
+                    borderRadius: 10,
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    color: '#141413',
+                    background: '#FFFFFF',
+                  }}
+                />
+                {nameError && (
+                  <span style={{ fontSize: 11, color: '#EF4444', marginTop: 4, display: 'block' }}>
+                    {nameError}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 6 }}>
+                  Email Terdaftar
+                </label>
+                <input
+                  type="email"
+                  value={profile.email}
+                  readOnly
+                  disabled
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px',
+                    fontSize: 14,
+                    border: '1px solid #EAE6E1',
+                    borderRadius: 10,
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    color: '#767676',
+                    background: '#F3F0EE',
+                    cursor: 'not-allowed',
+                  }}
+                />
+                <span style={{ fontSize: 11, color: '#767676', marginTop: 4, display: 'block' }}>
+                  Alamat email terhubung tidak dapat diubah
+                </span>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 6 }}>
+                  Nomor WhatsApp
+                </label>
+                <input
+                  type="tel"
+                  value={draftPhone}
+                  onChange={(e) => setDraftPhone(e.target.value)}
+                  placeholder="Contoh: 081298765432"
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px',
+                    fontSize: 14,
+                    border: '1px solid #EAE6E1',
+                    borderRadius: 10,
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    color: '#141413',
+                    background: '#FFFFFF',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#141413', display: 'block', marginBottom: 6 }}>
+                  Kota / Wilayah
+                </label>
+                <input
+                  type="text"
+                  value={draftCity}
+                  onChange={(e) => setDraftCity(e.target.value)}
+                  placeholder="Contoh: Yogyakarta"
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px',
+                    fontSize: 14,
+                    border: '1px solid #EAE6E1',
+                    borderRadius: 10,
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    color: '#141413',
+                    background: '#FFFFFF',
+                  }}
+                />
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  gap: 12,
+                  marginTop: 10,
+                  paddingTop: 16,
+                  borderTop: '1px solid #EAE6E1',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid #EAE6E1',
+                    borderRadius: 10,
+                    padding: '10px 18px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: '#141413',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  style={{
+                    padding: '10px 22px',
+                    fontSize: 14,
+                  }}
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '8px 4px' }}>
+            <div
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: '50%',
+                backgroundColor: '#FFF7F3',
+                border: '1.5px solid #FDDCC8',
+                color: '#F37338',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#141413', marginBottom: 6 }}>
+              Konfirmasi Perubahan Profil
+            </h3>
+            <p style={{ fontSize: 13, color: '#696969', lineHeight: 1.5, marginBottom: 20 }}>
+              Apakah Anda yakin ingin menyimpan perubahan data profil ini?
+            </p>
+
+            <div
+              style={{
+                background: '#FAF8F5',
+                border: '1px solid #EAE6E1',
+                borderRadius: 12,
+                padding: '14px 16px',
+                textAlign: 'left',
+                marginBottom: 24,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span style={{ color: '#767676' }}>Nama Lengkap</span>
+                <span style={{ fontWeight: 600, color: '#141413' }}>{draftName || '-'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span style={{ color: '#767676' }}>WhatsApp</span>
+                <span style={{ fontWeight: 600, color: '#141413' }}>{draftPhone || '-'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span style={{ color: '#767676' }}>Kota / Wilayah</span>
+                <span style={{ fontWeight: 600, color: '#141413' }}>{draftCity || '-'}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                type="button"
+                onClick={() => setMode('edit')}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: '1px solid #EAE6E1',
+                  borderRadius: 10,
+                  padding: '11px 16px',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: '#141413',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Periksa Kembali
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleConfirmSave}
+                style={{
+                  flex: 1,
+                  padding: '11px 16px',
+                  fontSize: 14,
+                }}
+              >
+                Ya, Simpan
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AkunTab({
+  profile,
+  userId,
+  onOpenEdit,
+}: {
+  profile: UserProfile;
+  userId: string | null;
+  onOpenEdit: () => void;
+}) {
   return (
     <div>
       <h2 style={{ fontSize: 22, fontWeight: 700, color: '#141413', marginBottom: 6 }}>
@@ -1860,7 +2510,6 @@ function AkunTab({
         Informasi profil pribadi dan ID keanggotaan Anda di dinail.co
       </p>
 
-      {/* ID User Card */}
       {userId && (
         <div
           style={{
@@ -1874,7 +2523,7 @@ function AkunTab({
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: 12,
-            maxWidth: 520,
+            maxWidth: 680,
           }}
         >
           <div>
@@ -1912,70 +2561,80 @@ function AkunTab({
         </div>
       )}
 
-      {/* Form Data Diri */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 520 }}>
-        {[
-          { label: 'Nama Lengkap', value: name, setter: setName, type: 'text', readOnly: false },
-          { label: 'Email Terdaftar', value: currentUser?.email || 'sari@example.com', setter: () => { }, type: 'email', readOnly: true },
-          { label: 'Nomor WhatsApp', value: phone, setter: setPhone, type: 'tel', readOnly: false },
-          { label: 'Kota / Wilayah', value: city, setter: setCity, type: 'text', readOnly: false },
-        ].map((field) => (
-          <div key={field.label}>
-            <label
+      {/* Flat List Data Profil */}
+      <div style={{ maxWidth: 680 }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {[
+            { label: 'ID User', value: userId || 'DNL-USR-8492', isMonospace: true },
+            { label: 'Nama Lengkap', value: profile.name },
+            { label: 'Email Terdaftar', value: profile.email, note: 'Email Utama' },
+            { label: 'Nomor WhatsApp', value: profile.phone || '-' },
+            { label: 'Kota / Wilayah', value: profile.city || '-' },
+          ].map((item, idx, arr) => (
+            <div
+              key={item.label}
               style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#141413',
-                display: 'block',
-                marginBottom: 6,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '18px 0',
+                borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #EAE6E1',
+                gap: 16,
               }}
             >
-              {field.label}
-            </label>
-            <input
-              type={field.type}
-              value={field.value}
-              onChange={(e) => !field.readOnly && (field.setter as (v: string) => void)(e.target.value)}
-              readOnly={field.readOnly}
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                fontSize: 14,
-                border: '1px solid #EAE6E1',
-                borderRadius: 10,
-                background: field.readOnly ? '#F3F0EE' : '#FFFFFF',
-                color: field.readOnly ? '#696969' : '#141413',
-                outline: 'none',
-                fontFamily: 'inherit',
-                cursor: field.readOnly ? 'default' : 'text',
-              }}
-            />
-          </div>
-        ))}
+              <span style={{ fontSize: 13, color: '#696969', flexShrink: 0 }}>
+                {item.label}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'right', minWidth: 0 }}>
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: '#141413',
+                    fontFamily: item.isMonospace ? 'monospace' : 'inherit',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {item.value}
+                </span>
+                {item.note && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: '#16A34A',
+                      background: '#F0FDF4',
+                      border: '1px solid #BBF7D0',
+                      padding: '2px 6px',
+                      borderRadius: 4,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {item.note}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
 
-        {saved && (
-          <div
+        {/* Tombol Ubah Profil langsung di bawah list informasi */}
+        <div style={{ marginTop: 28 }}>
+          <button
+            className="btn-primary"
+            onClick={onOpenEdit}
             style={{
-              background: '#F0FDF4',
-              border: '1px solid #BBF7D0',
-              borderRadius: 10,
-              padding: '10px 16px',
-              fontSize: 13,
-              color: '#15803D',
-              fontWeight: 600,
+              padding: '12px 28px',
+              fontSize: 14,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
             }}
           >
-            ✓ Perubahan data profil berhasil disimpan!
-          </div>
-        )}
-
-        <button
-          className="btn-primary"
-          style={{ padding: '13px 32px', fontSize: 14, alignSelf: 'flex-start', marginTop: 4 }}
-          onClick={handleSave}
-        >
-          Simpan Perubahan Profil
-        </button>
+            <IconEdit size={14} />
+            <span>Ubah Profil</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -2054,17 +2713,37 @@ function ProfileContent() {
   const tabParam = searchParams.get('tab');
   const initialDesignParam = searchParams.get('design') || undefined;
 
-  // Tentukan tab awal (default ke 'konsultasi', atau 'ukuran' jika URL memintanya)
+  // Tentukan tab awal (default ke 'akun', atau sesuai parameter URL ?tab= atau ?design=)
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(() => {
+    if (tabParam === 'konsultasi' || initialDesignParam) return 'konsultasi';
     if (tabParam === 'ukuran') return 'ukuran';
-    if (tabParam === 'akun') return 'akun';
     if (tabParam === 'notifikasi') return 'notifikasi';
-    return 'konsultasi';
+    return 'akun';
   });
 
-  const displayName = currentUser?.name || 'Sari Dewi';
+  const [profile, setProfile] = useState<UserProfile>(() => loadProfile(currentUser));
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const displayName = profile.name || currentUser?.name || 'Sari Dewi';
   const displayInitial = displayName.charAt(0).toUpperCase();
   const photoUrl = currentUser?.photoUrl;
+
+  const handleSaveProfile = (updated: { name: string; phone: string; city: string }) => {
+    const newProfile: UserProfile = {
+      ...profile,
+      name: updated.name,
+      phone: updated.phone,
+      city: updated.city,
+    };
+    setProfile(newProfile);
+    saveProfile(newProfile);
+    setIsEditProfileOpen(false);
+    setToastMessage('Profil berhasil diperbarui');
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === 'Profil berhasil diperbarui' ? null : prev));
+    }, 3000);
+  };
 
   const handleMenuClick = (key: string) => {
     if (key === 'keluar') {
@@ -2122,6 +2801,7 @@ function ProfileContent() {
               {/* Header Profil: Avatar bulat di kiri, nama user, Ubah Profil, badge ID User */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
                 {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={photoUrl}
                     alt={displayName}
@@ -2168,7 +2848,10 @@ function ProfileContent() {
                     {displayName}
                   </p>
                   <button
-                    onClick={() => setActiveMenu('akun')}
+                    onClick={() => {
+                      setActiveMenu('akun');
+                      setIsEditProfileOpen(true);
+                    }}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -2300,19 +2983,65 @@ function ProfileContent() {
             {/* ── 2. AREA KONTEN KANAN ── */}
             <section className="profil-content">
               {activeMenu === 'akun' && (
-                <AkunTab currentUser={currentUser} userId={userId} />
+                <AkunTab
+                  profile={profile}
+                  userId={userId}
+                  onOpenEdit={() => setIsEditProfileOpen(true)}
+                />
               )}
               {activeMenu === 'ukuran' && (
                 <UkuranKukuTab />
               )}
               {activeMenu === 'konsultasi' && (
-                <KonsultasiTab initialDesign={initialDesignParam} />
+                <KonsultasiTab
+                  key={`${userId || 'guest'}-${profile.name}`}
+                  userId={userId}
+                  userProfileName={profile.name}
+                  initialDesign={initialDesignParam}
+                  onNavigateToUkuran={() => setActiveMenu('ukuran')}
+                />
               )}
               {activeMenu === 'notifikasi' && (
                 <NotifikasiTab />
               )}
             </section>
 
+          </div>
+        )}
+
+        {/* Modal Ubah Profil dengan Dialog Konfirmasi */}
+        <EditProfileModal
+          key={`${isEditProfileOpen}-${profile.name}-${profile.phone}-${profile.city}`}
+          isOpen={isEditProfileOpen}
+          profile={profile}
+          onClose={() => setIsEditProfileOpen(false)}
+          onSave={handleSaveProfile}
+        />
+
+        {/* Notifikasi Toast Berhasil */}
+        {toastMessage && (
+          <div
+            style={{
+              position: 'fixed',
+              bottom: 24,
+              right: 24,
+              zIndex: 10003,
+              background: '#141413',
+              color: '#FFFFFF',
+              padding: '12px 20px',
+              borderRadius: 12,
+              boxShadow: '0 8px 24px rgba(20, 20, 19, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>{toastMessage}</span>
           </div>
         )}
 
