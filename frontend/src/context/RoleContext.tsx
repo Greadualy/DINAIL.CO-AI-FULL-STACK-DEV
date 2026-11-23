@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth, googleProvider } from '@/config/firebase';
 
-export type UserRole = 'guest' | 'user';
+export type UserRole = 'guest' | 'user' | 'customer' | 'admin' | 'owner';
 
 export interface RoleUser {
   role: UserRole;
@@ -17,8 +17,11 @@ export interface RoleUser {
   savedMeasurements?: unknown;
 }
 
-const MOCK_USERS: Record<Exclude<UserRole, 'guest'>, RoleUser> = {
-  user: { role: 'user', name: 'Sari Dewi', email: 'sari@example.com' },
+const MOCK_USERS: Record<string, RoleUser> = {
+  customer: { role: 'customer', name: 'Sari Dewi', email: 'sari@example.com' },
+  admin: { role: 'admin', name: 'Admin Dinail', email: 'admin@dinail.co' },
+  owner: { role: 'owner', name: 'Owner Dinail', email: 'owner@dinail.co' },
+  user: { role: 'customer', name: 'Sari Dewi', email: 'sari@example.com' },
 };
 
 const generateUserId = (): string => {
@@ -71,8 +74,9 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
       if (response.ok && data.success && data.data) {
         const dbUser = data.data;
+        const role = (dbUser.role as UserRole) || 'customer';
         const mappedUser: RoleUser = {
-          role: 'user',
+          role,
           name: dbUser.name || firebaseUser.displayName || 'Customer',
           email: dbUser.email || firebaseUser.email || '',
           photoUrl: dbUser.photoUrl || firebaseUser.photoURL,
@@ -84,7 +88,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         setCurrentUser(mappedUser);
         const uid = dbUser.id ? `DNL-USR-${dbUser.id.substring(0, 4).toUpperCase()}` : generateUserId();
         setUserId(uid);
-        localStorage.setItem('dinail_role', 'user');
+        localStorage.setItem('dinail_role', role);
         localStorage.setItem('dinail_userId', uid);
       } else {
         throw new Error(data.message || 'Gagal sinkronisasi data dengan backend.');
@@ -92,7 +96,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('[RoleContext] Backend sync failed, using Firebase profile:', error);
       const fallbackUser: RoleUser = {
-        role: 'user',
+        role: 'customer',
         name: firebaseUser.displayName || 'Customer',
         email: firebaseUser.email || '',
         photoUrl: firebaseUser.photoURL,

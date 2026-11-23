@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
+import { useRole } from '@/context/RoleContext';
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export type AdminMenu = 'penjualan' | 'orderan' | 'import';
 
@@ -75,11 +78,61 @@ function parseNominal(str: string | number | undefined): number {
 }
 
 function normalizeOrderStatus(status: string): AdminOrderStatus {
-  const s = status.toLowerCase();
-  if (s === 'antrian' || s === 'menunggu') return 'Antrian';
-  if (s === 'disetujui' || s === 'siap_checkout' || s === 'proses' || s === 'selesai') return 'Disetujui';
-  if (s === 'ditolak' || s === 'dibatalkan') return 'Ditolak';
+  const s = (status || '').toLowerCase();
+  if (s === 'antrian' || s === 'menunggu' || s === 'pending') return 'Antrian';
+  if (
+    s === 'disetujui' ||
+    s === 'siap_checkout' ||
+    s === 'proses' ||
+    s === 'selesai' ||
+    s === 'confirmed' ||
+    s === 'in_progress' ||
+    s === 'completed'
+  ) {
+    return 'Disetujui';
+  }
+  if (s === 'ditolak' || s === 'dibatalkan' || s === 'cancelled') return 'Ditolak';
   return 'Antrian';
+}
+
+function mapBackendConsultation(c: any): AdminOrder {
+  const createdAtDate = c.createdAt ? new Date(c.createdAt) : new Date();
+  const dateLabel = createdAtDate.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const timeLabel = createdAtDate.toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  let nailSizeSummary = 'Preset M';
+  if (c.user?.savedSizePreset) {
+    nailSizeSummary = `Preset ${c.user.savedSizePreset}`;
+  } else if (c.confirmedSize) {
+    nailSizeSummary = c.confirmedSize;
+  }
+
+  return {
+    consultationId: c.consultationCode || c.id,
+    userId: c.userId || c.user?.id,
+    customerName: c.user?.name || c.user?.email || 'Customer',
+    nailSizeSummary,
+    referenceLink: c.referenceLink || undefined,
+    submittedAt: `${dateLabel}, ${timeLabel}`,
+    status: normalizeOrderStatus(c.status || 'Antrian'),
+    serviceType: c.serviceType || 'Custom Press-On Nails',
+    designName: c.designName || 'Custom Press-On Nails',
+    variant: c.variant || 'Custom',
+    notes: c.customerNotes || '',
+    estimasiHarga: c.estimatedPrice || 'Menunggu estimasi',
+    photoUrl: c.photoUrl || '/assets/catalog/sample-1.jpg',
+    shopeeUrl: c.shopeeUrl || undefined,
+    adminFeedback: c.adminFeedback || undefined,
+    reviewedAt: c.reviewedAt || undefined,
+    storageKey: 'backend_api',
+  };
 }
 
 function loadAllConsultations(): AdminOrder[] {
@@ -302,10 +355,13 @@ function CopyPill({ text }: { text: string }) {
 }
 
 export default function AdminDashboardPage() {
+  const { currentUser, currentRole, login } = useRole();
+  const [mounted, setMounted] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [activeMenu, setActiveMenu] = useState<AdminMenu>('penjualan');
-  const [orders, setOrders] = useState<AdminOrder[]>(() => loadAllConsultations());
-  const [offlineSales, setOfflineSales] = useState<OfflineSaleItem[]>(() => loadOfflineSales());
-  const [offlineBatches, setOfflineBatches] = useState<OfflineBatch[]>(() => loadOfflineBatches());
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [offlineSales, setOfflineSales] = useState<OfflineSaleItem[]>([]);
+  const [offlineBatches, setOfflineBatches] = useState<OfflineBatch[]>([]);
 
   // Modals & Forms
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
@@ -329,8 +385,53 @@ export default function AdminDashboardPage() {
     }, 3200);
   };
 
-  const refreshData = () => {
+  const fetchConsultationsFromBackend = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const backendOrders = json.data.map(mapBackendConsultation);
+        const localOrders = loadAllConsultations();
+        const existingIds = new Set(backendOrders.map((o: AdminOrder) => o.consultationId));
+        const merged = [...backendOrders, ...localOrders.filter((o) => !existingIds.has(o.consultationId))];
+        setOrders(merged);
+      }
+    } catch {
+      // Local fallback silently used if backend is temporarily offline
+    }
+  };
+
+  useEffect(() => {
+    setMounted(true);
     setOrders(loadAllConsultations());
+    setOfflineSales(loadOfflineSales());
+    setOfflineBatches(loadOfflineBatches());
+    fetchConsultationsFromBackend();
+
+    // Check cached role to prevent flashing access denied screen
+    const cachedRole = typeof window !== 'undefined' ? localStorage.getItem('dinail_role') : null;
+    if (cachedRole === 'admin' || cachedRole === 'owner') {
+      setIsCheckingAuth(false);
+    } else {
+      const timer = setTimeout(() => setIsCheckingAuth(false), 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner') {
+      setIsCheckingAuth(false);
+    }
+  }, [currentRole, currentUser]);
+
+  useEffect(() => {
+    if (activeMenu === 'orderan' || activeMenu === 'penjualan') {
+      fetchConsultationsFromBackend();
+    }
+  }, [activeMenu]);
+
+  const refreshData = () => {
+    fetchConsultationsFromBackend();
     setOfflineSales(loadOfflineSales());
     setOfflineBatches(loadOfflineBatches());
   };
@@ -627,6 +728,58 @@ export default function AdminDashboardPage() {
     showToast(`Batch "${fileName}" berhasil dihapus.`);
   };
 
+  const isAdmin = currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner';
+
+  if (!mounted || isCheckingAuth) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9F8F6' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 36, height: 36, border: '3px solid #EAE6E1', borderTopColor: '#B85338', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+          <p style={{ fontSize: 13, color: '#696969', fontWeight: 500 }}>Memuat Admin Panel dinail.co...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F7F5', padding: 24 }}>
+        <div style={{ maxWidth: 480, width: '100%', background: '#FFFFFF', borderRadius: 16, border: '1px solid #EAE6E1', padding: 32, textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.06)' }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: '#FDF0ED', color: '#B85338', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#141413', marginBottom: 8 }}>Akses Terbatas: Khusus Administrator</h2>
+          <p style={{ fontSize: 14, color: '#696969', lineHeight: 1.5, marginBottom: 20 }}>
+            Akun Anda saat ini terdaftar sebagai <strong>{currentUser?.role || currentRole || 'Customer'}</strong> ({currentUser?.email || 'Belum Login'}). Halaman ini hanya dapat diakses oleh staf admin atau pemilik dinail.co.
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link href="/" style={{ padding: '10px 18px', borderRadius: 10, backgroundColor: '#141413', color: '#FFFFFF', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+              Kembali ke Beranda
+            </Link>
+            <Link href="/profil" style={{ padding: '10px 18px', borderRadius: 10, backgroundColor: '#F0ECE6', color: '#141413', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+              Buka Profil Saya
+            </Link>
+          </div>
+          {process.env.NODE_ENV === 'development' && (
+            <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px dashed #EAE6E1' }}>
+              <span style={{ fontSize: 11, color: '#999', display: 'block', marginBottom: 8 }}>Mode Pengembangan (Development Only):</span>
+              <button
+                type="button"
+                onClick={() => login('admin')}
+                style={{ padding: '6px 12px', fontSize: 11, borderRadius: 6, border: '1px solid #B85338', background: '#FFFFFF', color: '#B85338', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Simulasikan Role Admin (Dev)
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ background: '#F9F8F6', minHeight: '100vh', display: 'flex', color: '#141413' }}>
       {/* ── 1. SIDEBAR KIRI ── */}
@@ -871,7 +1024,7 @@ export default function AdminDashboardPage() {
                 <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Total Pendapatan
                 </span>
-                <p style={{ fontSize: 24, fontWeight: 700, color: '#141413', margin: '6px 0 2px', letterSpacing: '-0.02em' }}>
+                <p suppressHydrationWarning style={{ fontSize: 24, fontWeight: 700, color: '#141413', margin: '6px 0 2px', letterSpacing: '-0.02em' }}>
                   {formatRupiah(metrics.totalRev)}
                 </p>
                 <span style={{ fontSize: 12, color: '#696969' }}>
@@ -887,7 +1040,7 @@ export default function AdminDashboardPage() {
                     Penjualan Online
                   </span>
                 </div>
-                <p style={{ fontSize: 24, fontWeight: 700, color: '#141413', margin: '6px 0 2px', letterSpacing: '-0.02em' }}>
+                <p suppressHydrationWarning style={{ fontSize: 24, fontWeight: 700, color: '#141413', margin: '6px 0 2px', letterSpacing: '-0.02em' }}>
                   {formatRupiah(metrics.onlineRev)}
                 </p>
                 <span style={{ fontSize: 12, color: '#696969' }}>
@@ -903,7 +1056,7 @@ export default function AdminDashboardPage() {
                     Penjualan Offline
                   </span>
                 </div>
-                <p style={{ fontSize: 24, fontWeight: 700, color: '#F37338', margin: '6px 0 2px', letterSpacing: '-0.02em' }}>
+                <p suppressHydrationWarning style={{ fontSize: 24, fontWeight: 700, color: '#F37338', margin: '6px 0 2px', letterSpacing: '-0.02em' }}>
                   {formatRupiah(metrics.offlineRev)}
                 </p>
                 <span style={{ fontSize: 12, color: '#696969' }}>
@@ -1698,8 +1851,22 @@ export default function AdminDashboardPage() {
         <ReferenceDetailModal
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
-          onSaveStatus={(newStatus, feedback, estimasiHarga, shopeeUrl) => {
+          onSaveStatus={async (newStatus, feedback, estimasiHarga, shopeeUrl) => {
             saveOrderUpdate(selectedOrder.storageKey, selectedOrder.consultationId, newStatus, feedback, estimasiHarga, shopeeUrl);
+            try {
+              await fetch(`${BACKEND_URL}/api/v1/consultations/${encodeURIComponent(selectedOrder.consultationId)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  status: newStatus,
+                  adminFeedback: feedback,
+                  estimatedPrice: estimasiHarga,
+                  shopeeUrl,
+                }),
+              });
+            } catch {
+              // Local update applied as fallback
+            }
             setSelectedOrder(null);
             refreshData();
             showToast(`Status orderan ${selectedOrder.consultationId} berhasil diubah menjadi ${newStatus}!`);

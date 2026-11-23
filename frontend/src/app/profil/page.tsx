@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, Suspense } from 'react';
+import { useState, useRef, Suspense, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -8,6 +8,9 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { useRole } from '@/context/RoleContext';
 import { DINAIL_ASSETS } from '@/constants/assets';
+import { auth } from '@/config/firebase';
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 function IconUser({ size = 18 }: { size?: number }) {
   return (
@@ -199,15 +202,26 @@ const DEFAULT_NAIL_DATA: NailSizeData = {
   photoUrl: null,
 };
 
-const STATUS_LABEL: Record<OrderStatus, string> = {
+const STATUS_LABEL: Record<string, string> = {
   menunggu: 'MENUNGGU REVIEW',
   Antrian: 'MENUNGGU REVIEW',
+  PENDING: 'MENUNGGU REVIEW',
+  pending: 'MENUNGGU REVIEW',
   proses: 'PROSES DESAIN',
+  IN_PROGRESS: 'PROSES DESAIN',
+  in_progress: 'PROSES DESAIN',
   siap_checkout: 'SIAP CHECKOUT',
   Disetujui: 'SIAP CHECKOUT',
+  disetujui: 'SIAP CHECKOUT',
+  CONFIRMED: 'SIAP CHECKOUT',
+  confirmed: 'SIAP CHECKOUT',
   selesai: 'SELESAI',
+  COMPLETED: 'SELESAI',
+  completed: 'SELESAI',
   dibatalkan: 'DITOLAK',
   Ditolak: 'DITOLAK',
+  CANCELLED: 'DITOLAK',
+  cancelled: 'DITOLAK',
 };
 
 const TAB_LIST: { key: OrderStatus | 'semua'; label: string }[] = [
@@ -1508,7 +1522,13 @@ function KonsultasiTab({
   const [showNewForm, setShowNewForm] = useState(Boolean(initialDesign));
 
   // Form states
-  const [customerName, setCustomerName] = useState(userProfileName || 'Sari Dewi');
+  const [customerName, setCustomerName] = useState(userProfileName && userProfileName !== 'Sari Dewi' ? userProfileName : 'Customer');
+
+  useEffect(() => {
+    if (userProfileName && userProfileName !== 'Sari Dewi') {
+      setCustomerName(userProfileName);
+    }
+  }, [userProfileName]);
   const [newNotes, setNewNotes] = useState('');
   const [refLink, setRefLink] = useState('');
   const [refPhotoUrl, setRefPhotoUrl] = useState<string | null>(null);
@@ -1522,14 +1542,85 @@ function KonsultasiTab({
   const [submittedOrder, setSubmittedOrder] = useState<OrderCard | null>(null);
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<OrderCard | null>(null);
 
+  useEffect(() => {
+    const fetchUserConsultations = async () => {
+      try {
+        const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+        const headers: Record<string, string> = {};
+        if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+        const res = await fetch(`${BACKEND_URL}/api/v1/consultations/me`, { headers });
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          const mapped: OrderCard[] = json.data.map((item: any) => {
+            const createdAtDate = item.createdAt ? new Date(item.createdAt) : new Date();
+            const dateLabel = createdAtDate.toLocaleDateString('id-ID', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            });
+            const timeLabel = createdAtDate.toLocaleTimeString('id-ID', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+
+            const rawStatus = (item.status || '').toUpperCase();
+            let mappedStatus: OrderStatus = 'menunggu';
+            if (rawStatus === 'CONFIRMED' || rawStatus === 'SIAP_CHECKOUT' || rawStatus === 'DISETUJUI') {
+              mappedStatus = 'siap_checkout';
+            } else if (rawStatus === 'IN_PROGRESS' || rawStatus === 'PROSES') {
+              mappedStatus = 'proses';
+            } else if (rawStatus === 'COMPLETED' || rawStatus === 'SELESAI') {
+              mappedStatus = 'selesai';
+            } else if (rawStatus === 'CANCELLED' || rawStatus === 'DITOLAK' || rawStatus === 'DIBATALKAN') {
+              mappedStatus = 'dibatalkan';
+            } else {
+              mappedStatus = 'menunggu';
+            }
+
+            return {
+              consultationId: item.consultationCode || item.id,
+              userId: item.userId,
+              customerName: item.user?.name || userProfileName || 'Customer',
+              nailSizeSummary: item.user?.savedSizePreset ? `Size ${item.user.savedSizePreset}` : 'Size M',
+              referenceLink: item.referenceLink || undefined,
+              submittedAt: `${dateLabel}, ${timeLabel}`,
+              status: mappedStatus,
+              serviceType: item.serviceType || 'Custom Press-On Nails',
+              designName: item.designName || 'Custom Press-On Nails',
+              variant: item.variant || 'Custom',
+              notes: item.customerNotes || '',
+              estimasiHarga: item.estimatedPrice || 'Menunggu estimasi',
+              photoUrl: item.photoUrl || DINAIL_ASSETS.catalogPreviews[0],
+              shopeeUrl: item.shopeeUrl || undefined,
+              adminFeedback: item.adminFeedback || undefined,
+              reviewedAt: item.reviewedAt || undefined,
+            };
+          });
+
+          const backendIds = new Set(mapped.map((m) => m.consultationId));
+          const localOnly = loadOrders(userId).filter((l) => !backendIds.has(l.consultationId));
+          setOrders([...mapped, ...localOnly]);
+        }
+      } catch {
+        // Fallback to local storage
+      }
+    };
+
+    fetchUserConsultations();
+  }, [userId, userProfileName]);
+
   // Filter real-time berdasarkan Tab Status dan Search Bar
   const filtered = orders.filter((o) => {
+    const norm = (o.status || '').toLowerCase();
     const matchStatus =
       activeStatus === 'semua' ||
-      o.status === activeStatus ||
-      (activeStatus === 'menunggu' && o.status === 'Antrian') ||
-      (activeStatus === 'siap_checkout' && o.status === 'Disetujui') ||
-      (activeStatus === 'dibatalkan' && o.status === 'Ditolak');
+      norm === activeStatus.toLowerCase() ||
+      (activeStatus === 'menunggu' && (norm === 'antrian' || norm === 'menunggu' || norm === 'pending')) ||
+      (activeStatus === 'siap_checkout' && (norm === 'disetujui' || norm === 'siap_checkout' || norm === 'confirmed')) ||
+      (activeStatus === 'proses' && (norm === 'proses' || norm === 'in_progress')) ||
+      (activeStatus === 'selesai' && (norm === 'selesai' || norm === 'completed')) ||
+      (activeStatus === 'dibatalkan' && (norm === 'ditolak' || norm === 'dibatalkan' || norm === 'cancelled'));
     const q = searchQuery.toLowerCase().trim();
     const matchSearch =
       !q ||
@@ -1606,6 +1697,36 @@ function KonsultasiTab({
     const updated = [newOrder, ...orders];
     setOrders(updated);
     saveOrders(updated, userId);
+
+    // Persist consultation to backend database
+    (async () => {
+      try {
+        const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+        const res = await fetch(`${BACKEND_URL}/api/v1/consultations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            consultationCode: newOrder.consultationId,
+            designName: newOrder.designName,
+            serviceType: newOrder.serviceType,
+            variant: newOrder.variant,
+            referenceLink: newOrder.referenceLink,
+            photoUrl: newOrder.photoUrl,
+            customerNotes: newOrder.notes,
+            estimatedPrice: newOrder.estimasiHarga,
+            customerName: newOrder.customerName,
+            userId: newOrder.userId,
+          }),
+        });
+        const resJson = await res.json();
+        console.log('[Consultation] Successfully synced to backend:', res.status, resJson);
+      } catch (err) {
+        console.error('Failed to sync consultation to backend database:', err);
+      }
+    })();
 
     // Open confirmation modal
     setSubmittedOrder(newOrder);
@@ -2179,9 +2300,9 @@ const LS_KEY_PROFILE = 'dinail_user_profile';
 
 const loadProfile = (fallbackUser: { name: string; email: string; phone?: string | null } | null): UserProfile => {
   const defaultProfile: UserProfile = {
-    name: fallbackUser?.name || 'Sari Dewi',
-    email: fallbackUser?.email || 'sari@example.com',
-    phone: fallbackUser?.phone || '081298765432',
+    name: fallbackUser?.name || 'Customer',
+    email: fallbackUser?.email || '',
+    phone: fallbackUser?.phone || '',
     city: 'Yogyakarta',
   };
 
@@ -2191,8 +2312,10 @@ const loadProfile = (fallbackUser: { name: string; email: string; phone?: string
     const raw = localStorage.getItem(LS_KEY_PROFILE);
     if (raw) {
       const parsed = JSON.parse(raw);
+      const isMockName = parsed.name === 'Sari Dewi';
+      const cleanName = isMockName ? (fallbackUser?.name || 'Customer') : parsed.name;
       return {
-        name: parsed.name || defaultProfile.name,
+        name: fallbackUser?.name || cleanName || defaultProfile.name,
         email: fallbackUser?.email || parsed.email || defaultProfile.email,
         phone: parsed.phone || defaultProfile.phone,
         city: parsed.city || defaultProfile.city,
@@ -2771,7 +2894,7 @@ function NotifikasiTab() {
 }
 
 function ProfileContent() {
-  const { currentUser, userId, logout, openModal } = useRole();
+  const { currentUser, currentRole, userId, logout, openModal } = useRole();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const initialDesignParam = searchParams.get('design') || undefined;
@@ -2788,7 +2911,18 @@ function ProfileContent() {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const displayName = profile.name || currentUser?.name || 'Sari Dewi';
+  useEffect(() => {
+    if (currentUser?.name) {
+      setProfile((prev) => ({
+        ...prev,
+        name: currentUser.name,
+        email: currentUser.email || prev.email,
+        phone: currentUser.phone || prev.phone,
+      }));
+    }
+  }, [currentUser]);
+
+  const displayName = currentUser?.name || profile.name || 'Customer';
   const displayInitial = displayName.charAt(0).toUpperCase();
   const photoUrl = currentUser?.photoUrl;
 
@@ -3040,20 +3174,22 @@ function ProfileContent() {
                 >
                   → Cek Daftar Harga
                 </Link>
-                <Link
-                  href="/admin"
-                  style={{
-                    display: 'block',
-                    fontSize: 13,
-                    color: '#F37338',
-                    fontWeight: 600,
-                    textDecoration: 'none',
-                    padding: '5px 0',
-                    transition: 'opacity 0.2s',
-                  }}
-                >
-                  → Dashboard Admin
-                </Link>
+                {(currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner') && (
+                  <Link
+                    href="/admin"
+                    style={{
+                      display: 'block',
+                      fontSize: 13,
+                      color: '#F37338',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                      padding: '5px 0',
+                      transition: 'opacity 0.2s',
+                    }}
+                  >
+                    → Dashboard Admin
+                  </Link>
+                )}
               </div>
             </aside>
 
