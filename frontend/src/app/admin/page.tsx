@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export type AdminMenu = 'penjualan' | 'orderan' | 'import';
 
@@ -80,6 +82,46 @@ function normalizeOrderStatus(status: string): AdminOrderStatus {
   if (s === 'disetujui' || s === 'siap_checkout' || s === 'proses' || s === 'selesai') return 'Disetujui';
   if (s === 'ditolak' || s === 'dibatalkan') return 'Ditolak';
   return 'Antrian';
+}
+
+function mapBackendConsultation(c: any): AdminOrder {
+  const createdAtDate = c.createdAt ? new Date(c.createdAt) : new Date();
+  const dateLabel = createdAtDate.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const timeLabel = createdAtDate.toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  let nailSizeSummary = 'Preset M';
+  if (c.user?.savedSizePreset) {
+    nailSizeSummary = `Preset ${c.user.savedSizePreset}`;
+  } else if (c.confirmedSize) {
+    nailSizeSummary = c.confirmedSize;
+  }
+
+  return {
+    consultationId: c.consultationCode || c.id,
+    userId: c.userId || c.user?.id,
+    customerName: c.user?.name || c.user?.email || 'Customer',
+    nailSizeSummary,
+    referenceLink: c.referenceLink || undefined,
+    submittedAt: `${dateLabel}, ${timeLabel}`,
+    status: c.status || 'Antrian',
+    serviceType: c.serviceType || 'Custom Press-On Nails',
+    designName: c.designName || 'Custom Press-On Nails',
+    variant: c.variant || 'Custom',
+    notes: c.customerNotes || '',
+    estimasiHarga: c.estimatedPrice || 'Menunggu estimasi',
+    photoUrl: c.photoUrl || '/assets/catalog/sample-1.jpg',
+    shopeeUrl: c.shopeeUrl || undefined,
+    adminFeedback: c.adminFeedback || undefined,
+    reviewedAt: c.reviewedAt || undefined,
+    storageKey: 'backend_api',
+  };
 }
 
 function loadAllConsultations(): AdminOrder[] {
@@ -329,8 +371,28 @@ export default function AdminDashboardPage() {
     }, 3200);
   };
 
+  const fetchConsultationsFromBackend = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const backendOrders = json.data.map(mapBackendConsultation);
+        const localOrders = loadAllConsultations();
+        const existingIds = new Set(backendOrders.map((o: AdminOrder) => o.consultationId));
+        const merged = [...backendOrders, ...localOrders.filter((o) => !existingIds.has(o.consultationId))];
+        setOrders(merged);
+      }
+    } catch {
+      // Local fallback silently used if backend is temporarily offline
+    }
+  };
+
+  useEffect(() => {
+    fetchConsultationsFromBackend();
+  }, []);
+
   const refreshData = () => {
-    setOrders(loadAllConsultations());
+    fetchConsultationsFromBackend();
     setOfflineSales(loadOfflineSales());
     setOfflineBatches(loadOfflineBatches());
   };
@@ -1698,8 +1760,22 @@ export default function AdminDashboardPage() {
         <ReferenceDetailModal
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
-          onSaveStatus={(newStatus, feedback, estimasiHarga, shopeeUrl) => {
+          onSaveStatus={async (newStatus, feedback, estimasiHarga, shopeeUrl) => {
             saveOrderUpdate(selectedOrder.storageKey, selectedOrder.consultationId, newStatus, feedback, estimasiHarga, shopeeUrl);
+            try {
+              await fetch(`${BACKEND_URL}/api/v1/consultations/${encodeURIComponent(selectedOrder.consultationId)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  status: newStatus,
+                  adminFeedback: feedback,
+                  estimatedPrice: estimasiHarga,
+                  shopeeUrl,
+                }),
+              });
+            } catch {
+              // Local update applied as fallback
+            }
             setSelectedOrder(null);
             refreshData();
             showToast(`Status orderan ${selectedOrder.consultationId} berhasil diubah menjadi ${newStatus}!`);

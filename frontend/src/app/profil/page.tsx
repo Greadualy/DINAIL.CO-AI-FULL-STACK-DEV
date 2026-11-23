@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, Suspense } from 'react';
+import { useState, useRef, Suspense, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -8,6 +8,9 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { useRole } from '@/context/RoleContext';
 import { DINAIL_ASSETS } from '@/constants/assets';
+import { auth } from '@/config/firebase';
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 function IconUser({ size = 18 }: { size?: number }) {
   return (
@@ -1522,6 +1525,60 @@ function KonsultasiTab({
   const [submittedOrder, setSubmittedOrder] = useState<OrderCard | null>(null);
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<OrderCard | null>(null);
 
+  useEffect(() => {
+    const fetchUserConsultations = async () => {
+      try {
+        const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+        const headers: Record<string, string> = {};
+        if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+        const res = await fetch(`${BACKEND_URL}/api/v1/consultations/me`, { headers });
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          const mapped: OrderCard[] = json.data.map((item: any) => {
+            const createdAtDate = item.createdAt ? new Date(item.createdAt) : new Date();
+            const dateLabel = createdAtDate.toLocaleDateString('id-ID', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            });
+            const timeLabel = createdAtDate.toLocaleTimeString('id-ID', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+
+            return {
+              consultationId: item.consultationCode || item.id,
+              userId: item.userId,
+              customerName: item.user?.name || userProfileName || 'Customer',
+              nailSizeSummary: item.user?.savedSizePreset ? `Size ${item.user.savedSizePreset}` : 'Size M',
+              referenceLink: item.referenceLink || undefined,
+              submittedAt: `${dateLabel}, ${timeLabel}`,
+              status: (item.status?.toLowerCase() || 'menunggu') as OrderStatus,
+              serviceType: item.serviceType || 'Custom Press-On Nails',
+              designName: item.designName || 'Custom Press-On Nails',
+              variant: item.variant || 'Custom',
+              notes: item.customerNotes || '',
+              estimasiHarga: item.estimatedPrice || 'Menunggu estimasi',
+              photoUrl: item.photoUrl || DINAIL_ASSETS.catalogPreviews[0],
+              shopeeUrl: item.shopeeUrl || undefined,
+              adminFeedback: item.adminFeedback || undefined,
+              reviewedAt: item.reviewedAt || undefined,
+            };
+          });
+
+          const backendIds = new Set(mapped.map((m) => m.consultationId));
+          const localOnly = loadOrders(userId).filter((l) => !backendIds.has(l.consultationId));
+          setOrders([...mapped, ...localOnly]);
+        }
+      } catch {
+        // Fallback to local storage
+      }
+    };
+
+    fetchUserConsultations();
+  }, [userId, userProfileName]);
+
   // Filter real-time berdasarkan Tab Status dan Search Bar
   const filtered = orders.filter((o) => {
     const matchStatus =
@@ -1606,6 +1663,34 @@ function KonsultasiTab({
     const updated = [newOrder, ...orders];
     setOrders(updated);
     saveOrders(updated, userId);
+
+    // Persist consultation to backend database
+    (async () => {
+      try {
+        const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+        await fetch(`${BACKEND_URL}/api/v1/consultations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            consultationCode: newOrder.consultationId,
+            designName: newOrder.designName,
+            serviceType: newOrder.serviceType,
+            variant: newOrder.variant,
+            referenceLink: newOrder.referenceLink,
+            photoUrl: newOrder.photoUrl,
+            customerNotes: newOrder.notes,
+            estimatedPrice: newOrder.estimasiHarga,
+            customerName: newOrder.customerName,
+            userId: newOrder.userId,
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to sync consultation to backend database:', err);
+      }
+    })();
 
     // Open confirmation modal
     setSubmittedOrder(newOrder);
