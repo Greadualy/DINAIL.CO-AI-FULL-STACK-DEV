@@ -202,15 +202,26 @@ const DEFAULT_NAIL_DATA: NailSizeData = {
   photoUrl: null,
 };
 
-const STATUS_LABEL: Record<OrderStatus, string> = {
+const STATUS_LABEL: Record<string, string> = {
   menunggu: 'MENUNGGU REVIEW',
   Antrian: 'MENUNGGU REVIEW',
+  PENDING: 'MENUNGGU REVIEW',
+  pending: 'MENUNGGU REVIEW',
   proses: 'PROSES DESAIN',
+  IN_PROGRESS: 'PROSES DESAIN',
+  in_progress: 'PROSES DESAIN',
   siap_checkout: 'SIAP CHECKOUT',
   Disetujui: 'SIAP CHECKOUT',
+  disetujui: 'SIAP CHECKOUT',
+  CONFIRMED: 'SIAP CHECKOUT',
+  confirmed: 'SIAP CHECKOUT',
   selesai: 'SELESAI',
+  COMPLETED: 'SELESAI',
+  completed: 'SELESAI',
   dibatalkan: 'DITOLAK',
   Ditolak: 'DITOLAK',
+  CANCELLED: 'DITOLAK',
+  cancelled: 'DITOLAK',
 };
 
 const TAB_LIST: { key: OrderStatus | 'semua'; label: string }[] = [
@@ -1511,7 +1522,13 @@ function KonsultasiTab({
   const [showNewForm, setShowNewForm] = useState(Boolean(initialDesign));
 
   // Form states
-  const [customerName, setCustomerName] = useState(userProfileName || 'Sari Dewi');
+  const [customerName, setCustomerName] = useState(userProfileName && userProfileName !== 'Sari Dewi' ? userProfileName : 'Customer');
+
+  useEffect(() => {
+    if (userProfileName && userProfileName !== 'Sari Dewi') {
+      setCustomerName(userProfileName);
+    }
+  }, [userProfileName]);
   const [newNotes, setNewNotes] = useState('');
   const [refLink, setRefLink] = useState('');
   const [refPhotoUrl, setRefPhotoUrl] = useState<string | null>(null);
@@ -1547,6 +1564,20 @@ function KonsultasiTab({
               minute: '2-digit',
             });
 
+            const rawStatus = (item.status || '').toUpperCase();
+            let mappedStatus: OrderStatus = 'menunggu';
+            if (rawStatus === 'CONFIRMED' || rawStatus === 'SIAP_CHECKOUT' || rawStatus === 'DISETUJUI') {
+              mappedStatus = 'siap_checkout';
+            } else if (rawStatus === 'IN_PROGRESS' || rawStatus === 'PROSES') {
+              mappedStatus = 'proses';
+            } else if (rawStatus === 'COMPLETED' || rawStatus === 'SELESAI') {
+              mappedStatus = 'selesai';
+            } else if (rawStatus === 'CANCELLED' || rawStatus === 'DITOLAK' || rawStatus === 'DIBATALKAN') {
+              mappedStatus = 'dibatalkan';
+            } else {
+              mappedStatus = 'menunggu';
+            }
+
             return {
               consultationId: item.consultationCode || item.id,
               userId: item.userId,
@@ -1554,7 +1585,7 @@ function KonsultasiTab({
               nailSizeSummary: item.user?.savedSizePreset ? `Size ${item.user.savedSizePreset}` : 'Size M',
               referenceLink: item.referenceLink || undefined,
               submittedAt: `${dateLabel}, ${timeLabel}`,
-              status: (item.status?.toLowerCase() || 'menunggu') as OrderStatus,
+              status: mappedStatus,
               serviceType: item.serviceType || 'Custom Press-On Nails',
               designName: item.designName || 'Custom Press-On Nails',
               variant: item.variant || 'Custom',
@@ -1581,12 +1612,15 @@ function KonsultasiTab({
 
   // Filter real-time berdasarkan Tab Status dan Search Bar
   const filtered = orders.filter((o) => {
+    const norm = (o.status || '').toLowerCase();
     const matchStatus =
       activeStatus === 'semua' ||
-      o.status === activeStatus ||
-      (activeStatus === 'menunggu' && o.status === 'Antrian') ||
-      (activeStatus === 'siap_checkout' && o.status === 'Disetujui') ||
-      (activeStatus === 'dibatalkan' && o.status === 'Ditolak');
+      norm === activeStatus.toLowerCase() ||
+      (activeStatus === 'menunggu' && (norm === 'antrian' || norm === 'menunggu' || norm === 'pending')) ||
+      (activeStatus === 'siap_checkout' && (norm === 'disetujui' || norm === 'siap_checkout' || norm === 'confirmed')) ||
+      (activeStatus === 'proses' && (norm === 'proses' || norm === 'in_progress')) ||
+      (activeStatus === 'selesai' && (norm === 'selesai' || norm === 'completed')) ||
+      (activeStatus === 'dibatalkan' && (norm === 'ditolak' || norm === 'dibatalkan' || norm === 'cancelled'));
     const q = searchQuery.toLowerCase().trim();
     const matchSearch =
       !q ||
@@ -1668,7 +1702,7 @@ function KonsultasiTab({
     (async () => {
       try {
         const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-        await fetch(`${BACKEND_URL}/api/v1/consultations`, {
+        const res = await fetch(`${BACKEND_URL}/api/v1/consultations`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1687,6 +1721,8 @@ function KonsultasiTab({
             userId: newOrder.userId,
           }),
         });
+        const resJson = await res.json();
+        console.log('[Consultation] Successfully synced to backend:', res.status, resJson);
       } catch (err) {
         console.error('Failed to sync consultation to backend database:', err);
       }
@@ -2264,9 +2300,9 @@ const LS_KEY_PROFILE = 'dinail_user_profile';
 
 const loadProfile = (fallbackUser: { name: string; email: string; phone?: string | null } | null): UserProfile => {
   const defaultProfile: UserProfile = {
-    name: fallbackUser?.name || 'Sari Dewi',
-    email: fallbackUser?.email || 'sari@example.com',
-    phone: fallbackUser?.phone || '081298765432',
+    name: fallbackUser?.name || 'Customer',
+    email: fallbackUser?.email || '',
+    phone: fallbackUser?.phone || '',
     city: 'Yogyakarta',
   };
 
@@ -2276,8 +2312,10 @@ const loadProfile = (fallbackUser: { name: string; email: string; phone?: string
     const raw = localStorage.getItem(LS_KEY_PROFILE);
     if (raw) {
       const parsed = JSON.parse(raw);
+      const isMockName = parsed.name === 'Sari Dewi';
+      const cleanName = isMockName ? (fallbackUser?.name || 'Customer') : parsed.name;
       return {
-        name: parsed.name || defaultProfile.name,
+        name: fallbackUser?.name || cleanName || defaultProfile.name,
         email: fallbackUser?.email || parsed.email || defaultProfile.email,
         phone: parsed.phone || defaultProfile.phone,
         city: parsed.city || defaultProfile.city,
@@ -2856,7 +2894,7 @@ function NotifikasiTab() {
 }
 
 function ProfileContent() {
-  const { currentUser, userId, logout, openModal } = useRole();
+  const { currentUser, currentRole, userId, logout, openModal } = useRole();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const initialDesignParam = searchParams.get('design') || undefined;
@@ -2873,7 +2911,18 @@ function ProfileContent() {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const displayName = profile.name || currentUser?.name || 'Sari Dewi';
+  useEffect(() => {
+    if (currentUser?.name) {
+      setProfile((prev) => ({
+        ...prev,
+        name: currentUser.name,
+        email: currentUser.email || prev.email,
+        phone: currentUser.phone || prev.phone,
+      }));
+    }
+  }, [currentUser]);
+
+  const displayName = currentUser?.name || profile.name || 'Customer';
   const displayInitial = displayName.charAt(0).toUpperCase();
   const photoUrl = currentUser?.photoUrl;
 
@@ -3125,20 +3174,22 @@ function ProfileContent() {
                 >
                   → Cek Daftar Harga
                 </Link>
-                <Link
-                  href="/admin"
-                  style={{
-                    display: 'block',
-                    fontSize: 13,
-                    color: '#F37338',
-                    fontWeight: 600,
-                    textDecoration: 'none',
-                    padding: '5px 0',
-                    transition: 'opacity 0.2s',
-                  }}
-                >
-                  → Dashboard Admin
-                </Link>
+                {(currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner') && (
+                  <Link
+                    href="/admin"
+                    style={{
+                      display: 'block',
+                      fontSize: 13,
+                      color: '#F37338',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                      padding: '5px 0',
+                      transition: 'opacity 0.2s',
+                    }}
+                  >
+                    → Dashboard Admin
+                  </Link>
+                )}
               </div>
             </aside>
 
