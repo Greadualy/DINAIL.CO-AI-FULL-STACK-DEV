@@ -58,12 +58,19 @@ model Product {
 
 model Consultation {
   id                    String             @id @default(uuid())
+  consultationCode      String?
   userId                String
   user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   productId             String?
   product               Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
+  serviceType           String?            @default("Custom Press-On Nails")
+  designName            String?
+  variant               String?
+  referenceLink         String?
   photoUrl              String?
   customerNotes         String?
+  estimatedPrice        String?
+  shopeeUrl             String?
   isValidPhoto          Boolean            @default(false)
   coinDetected          Boolean            @default(false)
   aiRejectionReason     String?
@@ -72,6 +79,7 @@ model Consultation {
   confirmedSize         String?
   confirmedMeasurements Json?
   adminFeedback         String?
+  reviewedAt            DateTime?
   status                ConsultationStatus @default(PENDING)
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt

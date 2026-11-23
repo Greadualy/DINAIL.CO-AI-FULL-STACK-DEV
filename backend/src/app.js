@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/auth.routes');
 const productRoutes = require('./routes/product.routes');
+const consultationRoutes = require('./routes/consultation.routes');
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.get('/', (req, res) => {
       health: '/api/health',
       products: '/api/v1/products',
       authSync: '/api/v1/auth/sync',
+      consultations: '/api/v1/consultations',
     },
   });
 });
@@ -31,6 +33,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/products', productRoutes);
+app.use('/api/v1/consultations', consultationRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

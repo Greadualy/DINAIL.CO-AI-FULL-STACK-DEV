@@ -33,6 +33,24 @@ const verifyFirebaseToken = async (req, res, next) => {
   }
 };
 
+const optionalFirebaseToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ') || !auth) {
+    req.user = null;
+    return next();
+  }
+
+  const token = authHeader.slice(7).trim();
+  try {
+    req.user = await auth.verifyIdToken(token);
+    return next();
+  } catch (error) {
+    req.user = null;
+    return next();
+  }
+};
+
 module.exports = {
   verifyFirebaseToken,
+  optionalFirebaseToken,
 };
