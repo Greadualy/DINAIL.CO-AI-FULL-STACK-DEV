@@ -150,7 +150,6 @@ export default function HeroSection() {
               }}
             >
               <span>Daftar Harga</span>
-              <span aria-hidden="true">&rarr;</span>
             </Link>
           </div>
         </div>

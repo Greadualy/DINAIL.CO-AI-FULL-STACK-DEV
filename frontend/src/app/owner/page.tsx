@@ -56,14 +56,68 @@ function isApproved(status: string): boolean {
   return ['disetujui', 'siap_checkout', 'proses', 'selesai', 'confirmed', 'in_progress', 'completed'].includes(s);
 }
 
-function isoToLabel(isoOrLabel: string): string {
-  try {
-    const d = new Date(isoOrLabel);
-    if (isNaN(d.getTime())) return isoOrLabel;
-    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-  } catch {
-    return isoOrLabel;
+const ID_MONTH_MAP: Record<string, number> = {
+  jan: 0, januari: 0,
+  feb: 1, februari: 1,
+  mar: 2, maret: 2,
+  apr: 3, april: 3,
+  mei: 4, may: 4,
+  jun: 5, juni: 5,
+  jul: 6, juli: 6,
+  agu: 7, agt: 7, agustus: 7, aug: 7,
+  sep: 8, sept: 8, september: 8,
+  okt: 9, oktober: 9, oct: 9,
+  nov: 10, november: 10,
+  des: 11, desember: 11, dec: 11,
+};
+
+function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function toDayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatDayLabel(d: Date): string {
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+}
+
+function parseTransactionDate(input: string | undefined): Date | null {
+  if (!input) return null;
+  const trimmed = String(input).trim();
+  if (!trimmed) return null;
+
+  // Format ISO YYYY-MM-DD (hindari pergeseran timezone UTC)
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const dt = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+    if (!isNaN(dt.getTime())) return startOfLocalDay(dt);
   }
+
+  // Format DD/MM/YYYY atau DD-MM-YYYY (umum dari impor Excel)
+  const dmyMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (dmyMatch) {
+    const dt = new Date(Number(dmyMatch[3]), Number(dmyMatch[2]) - 1, Number(dmyMatch[1]));
+    if (!isNaN(dt.getTime())) return startOfLocalDay(dt);
+  }
+
+  // Format lokal Indonesia: "25 Nov 2026, 14:30" atau "25 Nov 2026"
+  const idMatch = trimmed.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
+  if (idMatch) {
+    const monthIdx = ID_MONTH_MAP[idMatch[2].toLowerCase()];
+    if (monthIdx !== undefined) {
+      const dt = new Date(Number(idMatch[3]), monthIdx, Number(idMatch[1]));
+      if (!isNaN(dt.getTime())) return startOfLocalDay(dt);
+    }
+  }
+
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) return startOfLocalDay(parsed);
+  return null;
 }
 
 // ─── Data Loading ─────────────────────────────────────────────────────────────
@@ -115,20 +169,23 @@ function loadOfflineSales(): OfflineSaleItem[] {
 
 // ─── Demo / Fallback Data ─────────────────────────────────────────────────────
 
-function buildDemoDailySeries(days: number): DailySeries[] {
+function buildDemoDailySeries(startDate: Date, endDate: Date): DailySeries[] {
   const series: DailySeries[] = [];
-  const now = new Date(2026, 10, 25); // 25 Nov 2026
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const label = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-    const baseOnline = 385000 + Math.sin(i * 0.6) * 180000 + Math.cos(i * 1.1) * 45000;
-    const baseOffline = 245000 + Math.cos(i * 0.4) * 120000 + Math.sin(i * 0.9) * 30000;
+  const cursor = startOfLocalDay(startDate);
+  const end = startOfLocalDay(endDate);
+  let idx = 0;
+
+  while (cursor <= end) {
+    const label = formatDayLabel(cursor);
+    const baseOnline = 385000 + Math.sin(idx * 0.6) * 180000 + Math.cos(idx * 1.1) * 45000;
+    const baseOffline = 245000 + Math.cos(idx * 0.4) * 120000 + Math.sin(idx * 0.9) * 30000;
     series.push({
       date: label,
       online: Math.max(80000, Math.round(baseOnline)),
       offline: Math.max(50000, Math.round(baseOffline)),
     });
+    cursor.setDate(cursor.getDate() + 1);
+    idx += 1;
   }
   return series;
 }
@@ -302,7 +359,7 @@ function AreaLineChart({
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const width = 600;
   const padL = 48;
-  const padR = 12;
+  const padR = 28;
   const padT = 10;
   const padB = 32;
   const chartW = width - padL - padR;
@@ -318,16 +375,33 @@ function AreaLineChart({
   const onlineArea = `${onlinePath} L${xOf(n - 1)},${padT + chartH} L${xOf(0)},${padT + chartH} Z`;
   const offlineArea = `${offlinePath} L${xOf(n - 1)},${padT + chartH} L${xOf(0)},${padT + chartH} Z`;
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => ({ val: maxVal * f, y: yOf(maxVal * f) }));
-  const xLabels: { label: string; x: number }[] = [];
-  const step = Math.max(1, Math.floor(n / 6));
-  for (let i = 0; i < n; i += step) {
-    xLabels.push({ label: series[i].date, x: xOf(i) });
+
+  // Hitung label sumbu X dengan interval rapi dan selalu menampilkan tanggal terakhir (hari ini)
+  const xLabelIndices: number[] = [];
+  if (n <= 8) {
+    for (let i = 0; i < n; i++) xLabelIndices.push(i);
+  } else {
+    const step = Math.max(1, Math.ceil((n - 1) / 5));
+    for (let i = 0; i < n; i += step) {
+      xLabelIndices.push(i);
+    }
+    const lastIdx = n - 1;
+    if (xLabelIndices[xLabelIndices.length - 1] !== lastIdx) {
+      const prevIdx = xLabelIndices[xLabelIndices.length - 1];
+      if (lastIdx - prevIdx < Math.max(2, Math.floor(step * 0.6))) {
+        xLabelIndices[xLabelIndices.length - 1] = lastIdx;
+      } else {
+        xLabelIndices.push(lastIdx);
+      }
+    }
   }
+  const xLabels = xLabelIndices.map((idx) => ({ label: series[idx].date, x: xOf(idx) }));
   const activePoint = hoveredIdx !== null ? series[hoveredIdx] : null;
   const activeLeftPct = hoveredIdx !== null ? (xOf(hoveredIdx) / width) * 100 : 50;
 
   return (
-    <div style={{ position: 'relative', width: '100%', minWidth: 0 }} onMouseLeave={() => setHoveredIdx(null)}>
+    <div className="owner-chart-scroll w-full overflow-x-auto pb-2" onMouseLeave={() => setHoveredIdx(null)}>
+      <div className="owner-chart-inner min-w-[440px] sm:min-w-0" style={{ position: 'relative', width: '100%' }}>
       <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 'auto', display: 'block' }}>
         <defs>
           <linearGradient id="gradOnline" x1="0" y1="0" x2="0" y2="1">
@@ -409,6 +483,7 @@ function AreaLineChart({
               fill="transparent"
               style={{ cursor: 'crosshair' }}
               onMouseEnter={() => setHoveredIdx(i)}
+              onClick={() => setHoveredIdx(i)}
             />
           );
         })}
@@ -428,7 +503,7 @@ function AreaLineChart({
             style={{
               position: 'absolute',
               top: 6,
-              left: `${Math.min(78, Math.max(14, activeLeftPct))}%`,
+              left: `${Math.min(72, Math.max(24, activeLeftPct))}%`,
               transform: 'translateX(-50%)',
               background: '#141413',
               color: '#FFFFFF',
@@ -453,6 +528,7 @@ function AreaLineChart({
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -496,7 +572,8 @@ function ForecastChart({
   const activeLeftPct = hoveredIdx !== null ? (xOf(hoveredIdx) / width) * 100 : 50;
 
   return (
-    <div style={{ position: 'relative', width: '100%', minWidth: 0 }} onMouseLeave={() => setHoveredIdx(null)}>
+    <div className="owner-chart-scroll w-full overflow-x-auto pb-2" onMouseLeave={() => setHoveredIdx(null)}>
+      <div className="owner-chart-inner min-w-[440px] sm:min-w-0" style={{ position: 'relative', width: '100%' }}>
       <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 'auto', display: 'block' }}>
         {yTicks.map((t, i) => (
           <g key={i}>
@@ -569,6 +646,7 @@ function ForecastChart({
               fill="transparent"
               style={{ cursor: 'crosshair' }}
               onMouseEnter={() => setHoveredIdx(i)}
+              onClick={() => setHoveredIdx(i)}
             />
           );
         })}
@@ -588,7 +666,7 @@ function ForecastChart({
             style={{
               position: 'absolute',
               top: 6,
-              left: `${Math.min(78, Math.max(14, activeLeftPct))}%`,
+              left: `${Math.min(72, Math.max(24, activeLeftPct))}%`,
               transform: 'translateX(-50%)',
               background: '#141413',
               color: '#FFFFFF',
@@ -624,6 +702,7 @@ function ForecastChart({
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -712,28 +791,83 @@ export default function OwnerDashboardPage() {
     };
   }, [consultations, offlineSales, hasRealData, timeRange]);
 
-  // ── Daily Series ──
+  // ── Daily Series (Zero-Filled hingga Hari Ini) ──
   const dailySeries = useMemo((): DailySeries[] => {
+    const today = startOfLocalDay(new Date());
+
+    const getRangeStart = (earliestTxDate: Date | null): Date => {
+      if (timeRange === '7d') {
+        const d = new Date(today);
+        d.setDate(d.getDate() - 6);
+        return d;
+      }
+      if (timeRange === '30d') {
+        const d = new Date(today);
+        d.setDate(d.getDate() - 29);
+        return d;
+      }
+      if (timeRange === 'bulan') {
+        return new Date(today.getFullYear(), today.getMonth(), 1);
+      }
+      // 'semua'
+      if (earliestTxDate && earliestTxDate <= today) {
+        return startOfLocalDay(earliestTxDate);
+      }
+      const fallback = new Date(today);
+      fallback.setDate(fallback.getDate() - (hasRealData ? 29 : 59));
+      return fallback;
+    };
+
     if (!hasRealData) {
-      const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : timeRange === 'bulan' ? 30 : 60;
-      return buildDemoDailySeries(days);
+      const startDate = getRangeStart(null);
+      return buildDemoDailySeries(startDate, today);
     }
-    // Aggregate from real data
+
+    // Agregasi transaksi aktual berdasarkan key lokal YYYY-MM-DD
     const map: Record<string, { online: number; offline: number }> = {};
+    let earliestDate: Date | null = null;
+
+    const trackEarliest = (dt: Date) => {
+      if (!earliestDate || dt < earliestDate) {
+        earliestDate = dt;
+      }
+    };
+
     consultations.forEach((c) => {
       if (!isApproved(c.status)) return;
-      const dateKey = isoToLabel(c.submittedAt);
-      if (!map[dateKey]) map[dateKey] = { online: 0, offline: 0 };
-      map[dateKey].online += parseNominal(c.estimasiHarga);
+      const dt = parseTransactionDate(c.submittedAt);
+      if (!dt) return;
+      trackEarliest(dt);
+      const key = toDayKey(dt);
+      if (!map[key]) map[key] = { online: 0, offline: 0 };
+      map[key].online += parseNominal(c.estimasiHarga);
     });
+
     offlineSales.forEach((o) => {
-      const dateKey = isoToLabel(o.tanggal);
-      if (!map[dateKey]) map[dateKey] = { online: 0, offline: 0 };
-      map[dateKey].offline += o.nominal || 0;
+      const dt = parseTransactionDate(o.tanggal);
+      if (!dt) return;
+      trackEarliest(dt);
+      const key = toDayKey(dt);
+      if (!map[key]) map[key] = { online: 0, offline: 0 };
+      map[key].offline += o.nominal || 0;
     });
-    return Object.entries(map)
-      .map(([date, v]) => ({ date, ...v }))
-      .slice(-30);
+
+    const startDate = getRangeStart(earliestDate);
+    const result: DailySeries[] = [];
+    const cursor = startOfLocalDay(startDate);
+
+    while (cursor <= today) {
+      const key = toDayKey(cursor);
+      const bucket = map[key];
+      result.push({
+        date: formatDayLabel(cursor),
+        online: bucket ? bucket.online : 0,
+        offline: bucket ? bucket.offline : 0,
+      });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return result;
   }, [consultations, offlineSales, timeRange, hasRealData]);
 
   const forecastSeries = useMemo(() => buildForecastSeries(), []);
@@ -848,10 +982,10 @@ export default function OwnerDashboardPage() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', overflowX: 'clip', background: '#F3F0EE', fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
+    <div className="overflow-x-hidden" style={{ display: 'flex', minHeight: '100vh', width: '100%', maxWidth: '100%', overflowX: 'hidden', background: '#F3F0EE', fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
       {/* ── Sidebar (Desktop >= 1024px) ── */}
       <aside
-        className="dashboard-sidebar-desktop"
+        className="hidden lg:flex dashboard-sidebar-desktop"
         style={{
           width: 240,
           minWidth: 240,
@@ -1094,10 +1228,10 @@ export default function OwnerDashboardPage() {
       </AnimatePresence>
 
       {/* ── Main Content ── */}
-      <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
+      <main style={{ flex: 1, minWidth: 0, width: '100%', display: 'flex', flexDirection: 'column' }}>
+        {/* Header (Ringkas & Sticky di Mobile < 1024px, Utuh di Desktop >= 1024px) */}
         <div
-          className="dashboard-header"
+          className="dashboard-header flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -1109,15 +1243,15 @@ export default function OwnerDashboardPage() {
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 auto' }}>
             <button
               type="button"
               className="dashboard-mobile-menu-btn"
               onClick={() => setMobileDrawerOpen(true)}
               aria-label="Buka menu navigasi Owner"
               style={{
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 borderRadius: 10,
                 border: '1px solid #EAE6E1',
                 backgroundColor: '#F8F5F2',
@@ -1135,17 +1269,69 @@ export default function OwnerDashboardPage() {
               </svg>
             </button>
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontSize: 17, fontWeight: 700, color: '#141413', margin: 0, letterSpacing: '-0.02em' }}>
+              <h1 style={{ fontSize: 16.5, fontWeight: 700, color: '#141413', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
                 {activeMenu === 'penjualan' ? 'Dashboard Penjualan' : 'Insight Data Science'}
               </h1>
-              <p style={{ fontSize: 12.5, color: '#9B978F', margin: '2px 0 0' }}>
-                {activeMenu === 'penjualan' ? 'Monitoring omzet & performa gabungan Online + Offline' : 'Hasil analisis & prediksi tim Data Science'}
+              <p style={{ fontSize: 11.5, color: '#9B978F', margin: '2px 0 0', lineHeight: 1.35 }}>
+                {activeMenu === 'penjualan' ? 'Monitoring omzet & performa Online + Offline' : 'Analisis & prediksi tim Data Science'}
               </p>
             </div>
           </div>
 
-          {/* Time Range Filter */}
-          <div className="owner-range-bar scrollbar-hidden" style={{ display: 'flex', gap: 4, background: '#F3F0EE', borderRadius: 8, padding: 4 }}>
+          {/* Dropdown Filter Periode (Khusus Mobile & Tablet < 1024px) */}
+          <div
+            className="block lg:hidden owner-range-dropdown-mobile relative w-full"
+            style={{ position: 'relative', width: '100%' }}
+          >
+            <select
+              aria-label="Pilih Periode Penjualan"
+              value={timeRange}
+              onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange)}
+              className="dashboard-select-mobile w-full appearance-none bg-white border border-[#EAE6E1] rounded-xl px-3.5 py-2.5 pr-9 text-[13px] font-medium text-[#141413]"
+              style={{
+                width: '100%',
+                appearance: 'none',
+                WebkitAppearance: 'none',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #EAE6E1',
+                borderRadius: 12,
+                padding: '10px 36px 10px 14px',
+                fontSize: 13,
+                fontWeight: 500,
+                color: '#141413',
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              {timeRangePills.map((p) => (
+                <option key={`mobile-range-opt-${p.value}`} value={p.value}>
+                  Periode: {p.label}
+                </option>
+              ))}
+            </select>
+            <span
+              className="pointer-events-none"
+              style={{
+                position: 'absolute',
+                right: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: '#6B6760',
+                pointerEvents: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+              }}
+              aria-hidden="true"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </span>
+          </div>
+
+          {/* Time Range Filter Pills (Khusus Desktop >= 1024px — Utuh) */}
+          <div className="hidden lg:inline-flex owner-range-bar scrollbar-hidden" style={{ display: 'flex', gap: 4, background: '#F3F0EE', borderRadius: 8, padding: 4 }}>
             {timeRangePills.map((p) => {
               const isSelected = timeRange === p.value;
               return (
@@ -1412,7 +1598,7 @@ function PenjualanTab({
         >
       {/* KPI Strip */}
       <div
-        className="owner-kpi-grid"
+        className="owner-kpi-grid grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
         style={{
           background: '#FFFFFF',
           borderRadius: 10,
@@ -1426,12 +1612,13 @@ function PenjualanTab({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: 'easeOut', delay: i * 0.05 }}
+            className="p-3.5 sm:p-5"
             style={{
               padding: '22px 24px',
               borderRight: i < kpiItems.length - 1 ? '1px solid #EAE6E1' : 'none',
             }}
           >
-            <p style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#9B978F', margin: '0 0 8px' }}>
+            <p className="owner-kpi-label" style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#9B978F', margin: '0 0 8px' }}>
               {item.label}
             </p>
             <AnimatePresence mode="wait">
@@ -1441,19 +1628,20 @@ function PenjualanTab({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.22, ease: 'easeOut' }}
-                style={{ fontSize: 20, fontWeight: 700, color: '#141413', margin: '0 0 4px', letterSpacing: '-0.02em' }}
+                className="owner-kpi-value text-[16px] sm:text-[24px] font-bold tracking-tight whitespace-nowrap"
+                style={{ fontSize: 20, fontWeight: 700, color: '#141413', margin: '0 0 4px', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}
               >
                 {item.value}
               </motion.p>
             </AnimatePresence>
-            <p style={{ fontSize: 11.5, color: item.subColor, margin: 0 }}>{item.sub}</p>
+            <p className="owner-kpi-sub" style={{ fontSize: 11.5, color: item.subColor, margin: 0 }}>{item.sub}</p>
           </motion.div>
         ))}
       </div>
 
       {/* Trend Chart */}
       <div className="dashboard-card" style={{ background: '#FFFFFF', borderRadius: 10, padding: '24px 24px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        <div className="owner-chart-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
           <div>
             <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#141413', margin: 0 }}>Tren Penjualan Harian</h2>
             <p style={{ fontSize: 11.5, color: '#9B978F', margin: '2px 0 0' }}>Nominal penjualan per hari (Online + Offline)</p>
@@ -1473,7 +1661,7 @@ function PenjualanTab({
       </div>
 
       {/* Channel Split + Nail Shape — 2 cols */}
-      <div className="owner-two-col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="owner-two-col-grid grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         {/* Channel split bar chart */}
         <div className="dashboard-card" style={{ background: '#FFFFFF', borderRadius: 10, padding: '24px' }}>
           <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#141413', margin: '0 0 18px' }}>Komposisi Channel Penjualan</h2>
@@ -1812,7 +2000,7 @@ function InsightTab({
         >
       {/* Forecasting Chart */}
       <div className="dashboard-card" style={{ background: '#FFFFFF', borderRadius: 10, padding: '24px 24px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        <div className="owner-chart-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
           <div>
             <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#141413', margin: 0 }}>Forecasting Penjualan</h2>
             <p style={{ fontSize: 11.5, color: '#9B978F', margin: '2px 0 0' }}>30 hari aktual + prediksi 14 hari ke depan (Tim Data Science)</p>
@@ -1834,7 +2022,7 @@ function InsightTab({
       </div>
 
       {/* Design Trends + Size Distribution — 2 cols */}
-      <div className="owner-two-col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="owner-two-col-grid grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         {/* Design Trends */}
         <div className="dashboard-card" style={{ background: '#FFFFFF', borderRadius: 10, padding: '24px' }}>
           <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#141413', margin: '0 0 20px' }}>Tren Desain Teratas</h2>

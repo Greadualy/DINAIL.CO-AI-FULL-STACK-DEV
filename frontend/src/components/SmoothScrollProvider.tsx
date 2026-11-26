@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import Lenis from 'lenis';
 import gsap from 'gsap';
@@ -14,6 +14,7 @@ interface SmoothScrollProviderProps {
 
 export default function SmoothScrollProvider({ children }: SmoothScrollProviderProps) {
   const pathname = usePathname();
+  const lenisRef = useRef<Lenis | null>(null);
 
   useEffect(() => {
     const lenis = new Lenis({
@@ -39,6 +40,8 @@ export default function SmoothScrollProvider({ children }: SmoothScrollProviderP
         return false;
       },
     });
+    lenisRef.current = lenis;
+    lenis.scrollTo(0, { immediate: true, force: true });
 
     const onScroll = () => {
       ScrollTrigger.update();
@@ -56,14 +59,22 @@ export default function SmoothScrollProvider({ children }: SmoothScrollProviderP
       gsap.ticker.remove(onTick);
       lenis.off('scroll', onScroll);
       lenis.destroy();
+      lenisRef.current = null;
     };
   }, []);
 
   useEffect(() => {
+    lenisRef.current?.scrollTo(0, { immediate: true, force: true });
+    const rafId = window.requestAnimationFrame(() => {
+      lenisRef.current?.scrollTo(0, { immediate: true, force: true });
+    });
     const timer = setTimeout(() => {
       ScrollTrigger.refresh();
     }, 100);
-    return () => clearTimeout(timer);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      clearTimeout(timer);
+    };
   }, [pathname]);
 
   return <>{children}</>;

@@ -600,7 +600,7 @@ export default function CatalogPage() {
 
       {/* 4. CATALOG GRID SECTION */}
       <section className="catalog-grid-section" style={{ paddingTop: 12, paddingBottom: 112, paddingLeft: 24, paddingRight: 24 }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div className="max-w-[1280px] mx-auto" style={{ maxWidth: 1280, margin: '0 auto' }}>
           {/* Result Summary Strip */}
           <div
             style={{
@@ -646,7 +646,7 @@ export default function CatalogPage() {
                 paddingBottom: 2,
               }}
             >
-              Lihat Detail Price List &amp; 9 Shape Kuku &rarr;
+              Lihat Detail Price List &amp; 9 Shape Kuku
             </Link>
           </div>
 
@@ -655,15 +655,15 @@ export default function CatalogPage() {
             {isLoading ? (
               <motion.div
                 key="catalog-skeleton-grid"
-                className="catalog-cards-grid"
+                className="catalog-cards-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                  gap: '28px',
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gap: '20px',
                   alignItems: 'stretch',
                 }}
               >
@@ -673,12 +673,13 @@ export default function CatalogPage() {
                     className="catalog-skel-card"
                     style={{
                       backgroundColor: '#FFFFFF',
-                      borderRadius: '32px',
+                      borderRadius: '24px',
                       padding: '16px',
                       boxShadow: '0px 12px 32px rgba(20, 20, 19, 0.05)',
                       border: '1px solid #EBE6DF',
                       display: 'flex',
                       flexDirection: 'column',
+                      height: '100%',
                     }}
                   >
                     <Skeleton
@@ -689,7 +690,7 @@ export default function CatalogPage() {
                         borderRadius: '24px',
                       }}
                     />
-                    <div className="catalog-skel-body" style={{ padding: '18px 8px 6px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="catalog-skel-body lg:p-3.5" style={{ padding: '18px 8px 6px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
                       <Skeleton style={{ width: '78%', height: 18, borderRadius: 8 }} />
                       <Skeleton style={{ width: '58%', height: 14, borderRadius: 8 }} />
                       <Skeleton style={{ width: '66%', height: 22, borderRadius: 999, marginBottom: 4 }} />
@@ -701,15 +702,15 @@ export default function CatalogPage() {
             ) : (
               <motion.div
                 key={`catalog-grid-${activeCategory}-${activeSubType}`}
-                className="catalog-cards-grid"
+                className="catalog-cards-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                  gap: '28px',
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gap: '20px',
                   alignItems: 'stretch',
                 }}
               >
@@ -743,6 +744,7 @@ export default function CatalogPage() {
                     display: 'flex',
                     flexDirection: 'column',
                     width: '100%',
+                    height: '100%',
                   }}
                 >
                 {/* Image Area (1:1 Ratio, radius 24px) */}
@@ -774,12 +776,12 @@ export default function CatalogPage() {
                     alt={`${item.name} — ${item.category} ${item.typeBadge}`}
                     fill
                     style={{ objectFit: 'cover', transition: 'transform 0.4s ease' }}
-                    sizes="(max-width: 640px) 48vw, (max-width: 1024px) 46vw, 300px"
+                    sizes="(max-width: 640px) 48vw, (max-width: 1024px) 32vw, 25vw"
                   />
 
                   {/* Top-Left Badge: Nama Kategori */}
                   <span
-                    className="catalog-card-badge-left"
+                    className="catalog-card-badge-left lg:text-[11px] lg:px-2.5 lg:py-1"
                     style={{
                       position: 'absolute',
                       top: 12,
@@ -800,7 +802,7 @@ export default function CatalogPage() {
 
                   {/* Top-Right Badge: Varian Desain */}
                   <span
-                    className="catalog-card-badge-right"
+                    className="catalog-card-badge-right lg:text-[11px] lg:px-2.5 lg:py-1"
                     style={{
                       position: 'absolute',
                       top: 12,
@@ -825,7 +827,7 @@ export default function CatalogPage() {
 
                 {/* Info di Bawah Gambar */}
                 <div
-                  className="catalog-card-body"
+                  className="catalog-card-body lg:p-3.5"
                   style={{
                     padding: '18px 8px 6px',
                     display: 'flex',
@@ -835,7 +837,7 @@ export default function CatalogPage() {
                 >
                   {/* Nama Desain */}
                   <h2
-                    className="catalog-card-title"
+                    className="catalog-card-title lg:text-[16px] font-semibold line-clamp-1"
                     style={{
                       fontSize: '18px',
                       fontWeight: 600,
@@ -859,7 +861,7 @@ export default function CatalogPage() {
                     }}
                   >
                     <p
-                      className="catalog-card-price"
+                      className="catalog-card-price lg:text-[14px] font-bold"
                       style={{
                         fontSize: '15px',
                         fontWeight: 700,
@@ -903,7 +905,7 @@ export default function CatalogPage() {
                   {/* Full-width Action Button */}
                   <Link
                     href={buildConsultHref(item)}
-                    className="btn-secondary catalog-card-cta"
+                    className="btn-secondary catalog-card-cta lg:text-[13px] lg:py-2.5 whitespace-nowrap"
                     style={{
                       marginTop: 'auto',
                       width: '100%',
@@ -913,8 +915,8 @@ export default function CatalogPage() {
                       letterSpacing: '-0.01em',
                     }}
                   >
-                    <span className="cta-label-desktop">Gunakan Desain Ini untuk Konsultasi →</span>
-                    <span className="cta-label-mobile">Konsultasi →</span>
+                    <span className="cta-label-desktop">Konsultasi Desain</span>
+                    <span className="cta-label-mobile">Konsultasi</span>
                   </Link>
                 </div>
                 </motion.article>
@@ -997,7 +999,6 @@ export default function CatalogPage() {
               }}
             >
               <span>Ajukan Desain Kustom</span>
-              <span aria-hidden="true">&rarr;</span>
             </Link>
           </div>
         </div>
@@ -1157,7 +1158,6 @@ export default function CatalogPage() {
                 }}
               >
                 <span>Gunakan Desain Ini untuk Konsultasi</span>
-                <span aria-hidden="true">&rarr;</span>
               </Link>
             </div>
           </div>

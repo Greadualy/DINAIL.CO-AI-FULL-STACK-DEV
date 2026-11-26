@@ -4,6 +4,7 @@ import "./globals.css";
 import { RoleProvider } from "@/context/RoleContext";
 import RoleSwitcherModal from "@/components/RoleSwitcherModal";
 import SmoothScrollProvider from "@/components/SmoothScrollProvider";
+import ScrollToTop from "@/components/ScrollToTop";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -65,10 +66,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id" className={poppins.variable} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if ('scrollRestoration' in history) { history.scrollRestoration = 'manual'; } window.scrollTo(0, 0);`,
+          }}
+        />
+      </head>
       <body
         className={poppins.className}
         style={{ fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}
       >
+        <ScrollToTop />
         <RoleProvider>
           <SmoothScrollProvider>
             {children}

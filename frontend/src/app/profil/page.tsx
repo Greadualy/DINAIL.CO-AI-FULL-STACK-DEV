@@ -11,6 +11,15 @@ import Skeleton from '@/components/Skeleton';
 import { useRole } from '@/context/RoleContext';
 import { DINAIL_ASSETS } from '@/constants/assets';
 import { auth } from '@/config/firebase';
+import {
+  analyzeNailPhotos,
+  compressImageToDataUrl,
+  formatNailSizeSummary,
+  getNailSizeData,
+  saveNailSizeData,
+} from '@/services/nailSizeService';
+import { createConsultation } from '@/services/consultationService';
+import type { ConsultationNailPhotos, NailAIAnalysisResult, NailSizeData } from '@/types';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -118,6 +127,8 @@ export interface OrderCard {
   userId?: string;
   customerName?: string;
   nailSizeSummary?: string;
+  nailPhotos?: ConsultationNailPhotos;
+  aiConfidenceScore?: number;
   referenceLink?: string;
   submittedAt: string;
   status: OrderStatus;
@@ -143,15 +154,6 @@ export interface NailFingers {
 }
 
 export type SizePreset = 'XS' | 'S' | 'M' | 'L' | 'Custom';
-
-export interface NailSizeData {
-  preset: SizePreset;
-  leftHand: NailFingers;
-  rightHand: NailFingers;
-  syncHands: boolean;
-  photoUrl: string | null;
-  updatedAt?: string;
-}
 
 const SIZE_PRESETS: Record<Exclude<SizePreset, 'Custom'>, NailFingers> = {
   XS: { thumb: 14, index: 10, middle: 11, ring: 10, pinky: 8 },
@@ -239,48 +241,20 @@ function saveOrders(orders: OrderCard[], userId?: string | null) {
   } catch { }
 }
 
-const LS_KEY_NAIL_SIZE = 'dinail_nail_sizes';
-
-function loadNailData(): NailSizeData {
-  try {
-    const raw = localStorage.getItem(LS_KEY_NAIL_SIZE);
-    if (raw) return JSON.parse(raw) as NailSizeData;
-  } catch { }
-  return DEFAULT_NAIL_DATA;
+function loadNailData(userId?: string | null): NailSizeData {
+  return getNailSizeData(userId) || DEFAULT_NAIL_DATA;
 }
 
-function saveNailData(data: NailSizeData) {
-  try {
-    localStorage.setItem(LS_KEY_NAIL_SIZE, JSON.stringify(data));
-  } catch { }
+function saveNailData(data: NailSizeData, userId?: string | null) {
+  saveNailSizeData(data, userId);
 }
 
-function getSavedNailData(): NailSizeData | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(LS_KEY_NAIL_SIZE);
-    if (raw) {
-      const parsed = JSON.parse(raw) as NailSizeData;
-      if (parsed && (parsed.updatedAt || parsed.photoUrl)) {
-        return parsed;
-      }
-    }
-  } catch { }
+function getSavedNailData(userId?: string | null): NailSizeData | null {
+  const parsed = getNailSizeData(userId);
+  if (parsed && (parsed.updatedAt || parsed.photoUrl || parsed.fourFingersPhotoUrl || parsed.thumbPhotoUrl)) {
+    return parsed;
+  }
   return null;
-}
-
-function formatNailSizeSummary(data: NailSizeData): string {
-  const { preset, leftHand, rightHand } = data;
-  const leftStr = `${leftHand.thumb}-${leftHand.index}-${leftHand.middle}-${leftHand.ring}-${leftHand.pinky} mm`;
-  const rightStr = `${rightHand.thumb}-${rightHand.index}-${rightHand.middle}-${rightHand.ring}-${rightHand.pinky} mm`;
-
-  if (preset !== 'Custom') {
-    return `Size ${preset} (${leftStr})`;
-  }
-  if (leftStr === rightStr) {
-    return `Custom (${leftStr})`;
-  }
-  return `Custom (Kiri: ${leftStr} · Kanan: ${rightStr})`;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -468,7 +442,7 @@ function SubmitConfirmationModal({
           style={{ width: '100%', padding: '13px 20px', fontSize: 14, fontWeight: 600 }}
           onClick={onClose}
         >
-          Lihat di Riwayat Konsultasi →
+          Lihat di Riwayat Konsultasi
         </button>
       </div>
     </div>
@@ -717,7 +691,7 @@ function OrderDetailModal({
                 className="btn-primary"
                 style={{ padding: '9px 20px', fontSize: 13 }}
               >
-                Checkout Shopee →
+                Checkout Shopee
               </a>
             )}
           </div>
@@ -943,7 +917,7 @@ function OrderCardItem({
             className="btn-primary"
             style={{ padding: '8px 20px', fontSize: 13 }}
           >
-            Checkout Shopee →
+            Checkout Shopee
           </a>
         )}
       </div>
@@ -951,19 +925,79 @@ function OrderCardItem({
   );
 }
 
-// Konten Tab: Ukuran Kuku Saya (FITUR PENGUKURAN KUKU)
+// Konten Tab: Ukuran Kuku Saya (FITUR PENGUKURAN KUKU OTOMATIS VIA AI + MANUAL)
 
-function UkuranKukuTab() {
+const AI_SCAN_STEPS = [
+  'Mendeteksi referensi koin Rp 500...',
+  'Mengukur lebar 4 jari...',
+  'Mengukur lebar ibu jari...',
+] as const;
+
+function UkuranKukuTab({ userId }: { userId?: string | null }) {
   const [nailData, setNailData] = useState<NailSizeData>(DEFAULT_NAIL_DATA);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // State Pengukuran Otomatis via AI (2 Foto: 4 Jari + Ibu Jari)
+  const [isGuideOpen, setIsGuideOpen] = useState(true);
+  const [isGuideZoomOpen, setIsGuideZoomOpen] = useState(false);
+  const [fourFingersFile, setFourFingersFile] = useState<File | null>(null);
+  const [fourFingersPreview, setFourFingersPreview] = useState<string | null>(null);
+  const [thumbFile, setThumbFile] = useState<File | null>(null);
+  const [thumbPreview, setThumbPreview] = useState<string | null>(null);
+
+  const [aiStatus, setAiStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
+  const [aiStepIndex, setAiStepIndex] = useState(0);
+  const [aiResult, setAiResult] = useState<NailAIAnalysisResult | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const fourFingersInputRef = useRef<HTMLInputElement>(null);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
+  const scanTimersRef = useRef<number[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setNailData(loadNailData());
+      const loaded = loadNailData(userId);
+      setNailData(loaded);
+      setFourFingersPreview(loaded.fourFingersPhotoUrl || null);
+      setThumbPreview(loaded.thumbPhotoUrl || null);
+      if (loaded.lastAiResult && loaded.lastAiResult.success) {
+        setAiResult(loaded.lastAiResult);
+        setAiStatus('success');
+      } else {
+        setAiResult(null);
+        setAiStatus('idle');
+      }
     }, 0);
     return () => clearTimeout(timer);
+  }, [userId]);
+
+  useEffect(() => {
+    return () => {
+      scanTimersRef.current.forEach((id) => window.clearTimeout(id));
+      scanTimersRef.current = [];
+    };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (fourFingersPreview && fourFingersPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(fourFingersPreview);
+      }
+    };
+  }, [fourFingersPreview]);
+
+  useEffect(() => {
+    return () => {
+      if (thumbPreview && thumbPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(thumbPreview);
+      }
+    };
+  }, [thumbPreview]);
+
+  const clearScanTimers = () => {
+    scanTimersRef.current.forEach((id) => window.clearTimeout(id));
+    scanTimersRef.current = [];
+  };
 
   // Handle Preset Select
   const handleSelectPreset = (preset: SizePreset) => {
@@ -1013,24 +1047,183 @@ function UkuranKukuTab() {
     }));
   };
 
-  // Upload Foto Kuku
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload Foto Slot 1 (4 Jari) & Slot 2 (Ibu Jari) + Kompresi ringan ke DataURL
+  const handleSelectSlotPhoto = async (slot: 'fourFingers' | 'thumb', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        setNailData((prev) => ({ ...prev, photoUrl: dataUrl }));
-      }
-    };
-    reader.readAsDataURL(file);
+    const instantPreviewUrl = URL.createObjectURL(file);
+    if (slot === 'fourFingers') {
+      setFourFingersFile(file);
+      setFourFingersPreview(instantPreviewUrl);
+    } else {
+      setThumbFile(file);
+      setThumbPreview(instantPreviewUrl);
+    }
+
+    // Reset hasil analisis sementara agar user tahu perlu klik Analisis AI lagi untuk foto baru
+    setAiStatus('idle');
+    setAiResult(null);
+    setAiError(null);
+
+    try {
+      const compressedDataUrl = await compressImageToDataUrl(file, 600, 0.7);
+      setNailData((prev) => {
+        const next: NailSizeData =
+          slot === 'fourFingers'
+            ? {
+                ...prev,
+                fourFingersPhotoUrl: compressedDataUrl,
+                photoUrl: compressedDataUrl,
+                lastAiResult: undefined,
+                aiConfidenceScore: undefined,
+              }
+            : {
+                ...prev,
+                thumbPhotoUrl: compressedDataUrl,
+                lastAiResult: undefined,
+                aiConfidenceScore: undefined,
+              };
+        saveNailData(next, userId);
+        return next;
+      });
+    } catch {
+      // Tetap lanjut menggunakan object URL untuk sesi ini jika kompresi gagal
+    }
   };
 
-  const handleRemovePhoto = () => {
-    setNailData((prev) => ({ ...prev, photoUrl: null }));
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  // Hapus satu foto slot tertentu + reset hasil AI & sinkronkan localStorage
+  const handleRemoveSlotPhoto = (slot: 'fourFingers' | 'thumb') => {
+    clearScanTimers();
+    if (slot === 'fourFingers') {
+      setFourFingersFile(null);
+      setFourFingersPreview(null);
+      if (fourFingersInputRef.current) fourFingersInputRef.current.value = '';
+    } else {
+      setThumbFile(null);
+      setThumbPreview(null);
+      if (thumbInputRef.current) thumbInputRef.current.value = '';
+    }
+
+    setAiStatus('idle');
+    setAiStepIndex(0);
+    setAiResult(null);
+    setAiError(null);
+
+    setNailData((prev) => {
+      const next: NailSizeData =
+        slot === 'fourFingers'
+          ? {
+              ...prev,
+              fourFingersPhotoUrl: undefined,
+              photoUrl: null,
+              lastAiResult: undefined,
+              aiConfidenceScore: undefined,
+            }
+          : {
+              ...prev,
+              thumbPhotoUrl: undefined,
+              lastAiResult: undefined,
+              aiConfidenceScore: undefined,
+            };
+      saveNailData(next, userId);
+      return next;
+    });
+  };
+
+  // Analisis 2 Foto via AI Service (mendukung File baru maupun DataURL tersimpan)
+  const handleAnalyzeWithAI = async () => {
+    const fourFingersInput = fourFingersFile || fourFingersPreview;
+    const thumbInput = thumbFile || thumbPreview;
+    if (!fourFingersInput || !thumbInput || aiStatus === 'processing') return;
+
+    clearScanTimers();
+    setAiStatus('processing');
+    setAiStepIndex(0);
+    setAiResult(null);
+    setAiError(null);
+
+    const t1 = window.setTimeout(() => setAiStepIndex(1), 850);
+    const t2 = window.setTimeout(() => setAiStepIndex(2), 1700);
+    scanTimersRef.current = [t1, t2];
+
+    try {
+      const result = await analyzeNailPhotos(fourFingersInput, thumbInput);
+      clearScanTimers();
+
+      if (!result.success) {
+        setAiStatus('error');
+        setAiError(
+          result.errorMessage ||
+            'Koin tidak terdeteksi atau foto buram. Pastikan pencahayaan terang dan posisi tegak lurus dari atas.'
+        );
+        return;
+      }
+
+      const mappedPreset: SizePreset =
+        result.recommendedPreset === 'Kustom' ? 'Custom' : result.recommendedPreset;
+      const measuredFingers: NailFingers = {
+        thumb: result.measurements.thumb,
+        index: result.measurements.index,
+        middle: result.measurements.middle,
+        ring: result.measurements.ring,
+        pinky: result.measurements.pinky,
+      };
+      const nowLabel = new Date().toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+
+      setNailData((prev) => {
+        const next: NailSizeData = {
+          ...prev,
+          preset: mappedPreset,
+          leftHand: { ...measuredFingers },
+          rightHand: prev.syncHands ? { ...measuredFingers } : prev.rightHand,
+          aiConfidenceScore: result.confidenceScore,
+          lastAiResult: result,
+          updatedAt: nowLabel,
+        };
+        saveNailData(next, userId);
+        return next;
+      });
+      setAiResult(result);
+      setAiStatus('success');
+    } catch {
+      clearScanTimers();
+      setAiStatus('error');
+      setAiError(
+        'Terjadi kendala saat memproses foto. Pastikan koneksi stabil dan unggah ulang foto yang jelas bersama koin.'
+      );
+    }
+  };
+
+  // Reset kedua slot foto untuk percobaan ulang
+  const handleRetryPhotos = () => {
+    clearScanTimers();
+    setFourFingersFile(null);
+    setFourFingersPreview(null);
+    setThumbFile(null);
+    setThumbPreview(null);
+    setAiStatus('idle');
+    setAiStepIndex(0);
+    setAiResult(null);
+    setAiError(null);
+    setNailData((prev) => {
+      const next: NailSizeData = {
+        ...prev,
+        fourFingersPhotoUrl: undefined,
+        thumbPhotoUrl: undefined,
+        photoUrl: null,
+        aiConfidenceScore: undefined,
+        lastAiResult: undefined,
+      };
+      saveNailData(next, userId);
+      return next;
+    });
+    if (fourFingersInputRef.current) fourFingersInputRef.current.value = '';
+    if (thumbInputRef.current) thumbInputRef.current.value = '';
   };
 
   // Simpan Data Ukuran Kuku
@@ -1043,9 +1236,10 @@ function UkuranKukuTab() {
     });
     const finalData: NailSizeData = {
       ...nailData,
+      lastAiResult: aiResult ?? nailData.lastAiResult,
       updatedAt: dateLabel,
     };
-    saveNailData(finalData);
+    saveNailData(finalData, userId);
     setNailData(finalData);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3500);
@@ -1059,15 +1253,44 @@ function UkuranKukuTab() {
     { key: 'pinky', label: 'Kelingking' },
   ];
 
+  const hasFourFingers = Boolean(fourFingersFile || fourFingersPreview);
+  const hasThumb = Boolean(thumbFile || thumbPreview);
+  const uploadedCount = (hasFourFingers ? 1 : 0) + (hasThumb ? 1 : 0);
+  const isReadyToAnalyze = hasFourFingers && hasThumb && aiStatus !== 'processing';
+  const isScanning = aiStatus === 'processing';
+
+  const photoSlots: Array<{
+    key: 'fourFingers' | 'thumb';
+    label: string;
+    hint: string;
+    preview: string | null;
+    inputRef: React.RefObject<HTMLInputElement | null>;
+  }> = [
+    {
+      key: 'fourFingers',
+      label: '1. Foto 4 Jari (Telunjuk – Kelingking)',
+      hint: 'Rapatkan 4 jari di samping koin (Rp 100–1000)',
+      preview: fourFingersPreview,
+      inputRef: fourFingersInputRef,
+    },
+    {
+      key: 'thumb',
+      label: '2. Foto Ibu Jari (Jempol)',
+      hint: 'Posisikan jempol rata di samping koin (Rp 100–1000)',
+      preview: thumbPreview,
+      inputRef: thumbInputRef,
+    },
+  ];
+
   return (
-    <div style={{ width: '100%', minWidth: 0 }}>
+    <div style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
       {/* 1. Header Bagian */}
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: '#141413', margin: 0 }}>
           Ukuran Kuku Saya
         </h2>
         <p style={{ fontSize: 13, color: '#696969', margin: '4px 0 0', lineHeight: 1.5, whiteSpace: 'normal', overflowWrap: 'break-word' }}>
-          Simpan data ukuran kuku presisi untuk memastikan press-on nails pas dan nyaman di setiap jarimu.
+          Ukur otomatis menggunakan AI dari 2 foto atau sesuaikan manual untuk memastikan press-on nails pas di setiap jarimu.
         </p>
       </div>
 
@@ -1106,8 +1329,761 @@ function UkuranKukuTab() {
         )}
       </div>
 
-      {/* 2. Pilihan Preset Cepat (Flat Minimalis) */}
-      <div style={{ marginBottom: 28 }}>
+      {/* 2. UKUR OTOMATIS VIA FOTO (AI) — 2 SLOT FOTO DI BAGIAN ATAS */}
+      <div
+        style={{
+          backgroundColor: '#FAF7F5',
+          border: '1px solid #EAE6E1',
+          borderRadius: 18,
+          padding: '18px 18px 20px',
+          marginBottom: 28,
+          boxSizing: 'border-box',
+          width: '100%',
+        }}
+      >
+        {/* Header Blok AI + Indikator Kelengkapan */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 12,
+          }}
+        >
+          <div style={{ minWidth: 0, flex: '1 1 240px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor: '#F37338',
+                  display: 'inline-block',
+                  flexShrink: 0,
+                }}
+                aria-hidden="true"
+              />
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#141413', margin: 0 }}>
+                Ukur Otomatis via Foto (AI)
+              </h3>
+            </div>
+            <p style={{ fontSize: 12.5, color: '#696969', margin: 0, lineHeight: 1.5 }}>
+              Unggah 2 foto terpisah (4 jari &amp; ibu jari) bersama koin Rp 100 / 200 / 500 / 1000 agar sistem otomatis mengisi ukuran milimeter di bawah.
+            </p>
+          </div>
+
+          {/* Indikator Kelengkapan Foto (0/2, 1/2, 2/2) */}
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '5px 11px',
+              borderRadius: 999,
+              fontSize: 11.5,
+              fontWeight: 600,
+              backgroundColor: uploadedCount === 2 ? '#FFF5F0' : '#FFFFFF',
+              border: uploadedCount === 2 ? '1px solid rgba(243, 115, 56, 0.35)' : '1px solid #E5E0DA',
+              color: uploadedCount === 2 ? '#CF4500' : '#57534E',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                backgroundColor: uploadedCount === 2 ? '#F37338' : '#A8A29E',
+                display: 'inline-block',
+              }}
+              aria-hidden="true"
+            />
+            <span>{uploadedCount}/2 foto siap</span>
+          </span>
+        </div>
+
+        {/* Blok Panduan Pengambilan Foto (Accordion + Gambar Panduan Klik-Zoom) */}
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #EAE6E1',
+            borderRadius: 14,
+            marginBottom: 16,
+            overflow: 'hidden',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setIsGuideOpen((prev) => !prev)}
+            aria-expanded={isGuideOpen}
+            style={{
+              width: '100%',
+              background: 'transparent',
+              border: 'none',
+              padding: '11px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              color: '#141413',
+              fontSize: 12.5,
+              fontWeight: 600,
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#F37338"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ flexShrink: 0 }}
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+              <span>Panduan Pengambilan Foto dengan Koin</span>
+            </span>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#696969"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                flexShrink: 0,
+                transform: isGuideOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s ease',
+              }}
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+
+          <AnimatePresence initial={false}>
+            {isGuideOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                style={{ overflow: 'hidden' }}
+              >
+                <div
+                  style={{
+                    borderTop: '1px solid #F3F0EE',
+                    padding: '14px 14px 16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 14,
+                  }}
+                >
+                  {/* Gambar Panduan Ukur Koin (Klik untuk Zoom / Lightbox) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsGuideZoomOpen(true)}
+                      aria-label="Perbesar gambar panduan pengukuran kuku dengan koin"
+                      style={{
+                        position: 'relative',
+                        width: '100%',
+                        maxWidth: 420,
+                        margin: '0 auto',
+                        padding: 0,
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'zoom-in',
+                        display: 'block',
+                      }}
+                    >
+                      <Image
+                        src={DINAIL_ASSETS.guides.measureWithCoin}
+                        alt="Panduan cara mengukur kuku dengan koin Rp 100, 200, 500, atau 1000"
+                        width={900}
+                        height={900}
+                        sizes="(max-width: 640px) 92vw, 420px"
+                        className="rounded-2xl border border-[#EAE6E1] w-full max-w-[420px] mx-auto"
+                        style={{
+                          width: '100%',
+                          maxWidth: 420,
+                          height: 'auto',
+                          display: 'block',
+                          margin: '0 auto',
+                          borderRadius: 16,
+                          border: '1px solid #EAE6E1',
+                        }}
+                      />
+                      <span
+                        style={{
+                          position: 'absolute',
+                          bottom: 10,
+                          right: 10,
+                          backgroundColor: 'rgba(20, 20, 19, 0.78)',
+                          backdropFilter: 'blur(4px)',
+                          color: '#FFFFFF',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: '4px 10px',
+                          borderRadius: 999,
+                          lineHeight: 1.2,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                        }}
+                      >
+                        <IconSearch size={12} />
+                        <span>Perbesar Panduan</span>
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Daftar Instruksi Selaras dengan Gambar Panduan */}
+                  <div
+                    style={{
+                      backgroundColor: '#FAF7F5',
+                      border: '1px solid #EFEAE4',
+                      borderRadius: 12,
+                      padding: '12px 14px',
+                    }}
+                  >
+                    <p style={{ fontSize: 12.5, color: '#141413', margin: '0 0 8px', lineHeight: 1.45 }}>
+                      <strong style={{ fontWeight: 700 }}>Alat:</strong> Koin pecahan{' '}
+                      <strong style={{ fontWeight: 600 }}>Rp 100 / 200 / 500 / 1000</strong>.
+                    </p>
+                    <ul
+                      style={{
+                        margin: 0,
+                        paddingLeft: 18,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 5,
+                        fontSize: 12.5,
+                        color: '#555555',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <li>Tempat pengambilan foto terang.</li>
+                      <li>Foto tegak lurus dari atas, pastikan koin tetap terlihat bulat.</li>
+                      <li>Foto di permukaan datar (meja), jangan di tempat empuk (sofa/kasur).</li>
+                      <li>Pastikan sisi kuku terlihat jelas.</li>
+                      <li>Jika ada bentuk kuku yang berbeda, dapat dikonfirmasikan ke Admin saat konsultasi.</li>
+                    </ul>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Lightbox Zoom Gambar Panduan */}
+        <AnimatePresence>
+          {isGuideZoomOpen && (
+            <motion.div
+              key="guide-coin-lightbox"
+              onClick={() => setIsGuideZoomOpen(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 10020,
+                backgroundColor: 'rgba(20, 20, 19, 0.84)',
+                backdropFilter: 'blur(6px)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 16,
+              }}
+            >
+              <motion.div
+                onClick={(e) => e.stopPropagation()}
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.94 }}
+                transition={{ duration: 0.18 }}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 18,
+                  padding: 14,
+                  maxWidth: 'min(560px, 94vw)',
+                  maxHeight: '90vh',
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                  boxShadow: '0 24px 64px rgba(0, 0, 0, 0.35)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <p style={{ fontSize: 13.5, fontWeight: 700, color: '#141413', margin: 0 }}>
+                      Panduan Pengukuran Kuku dengan Koin
+                    </p>
+                    <p style={{ fontSize: 11.5, color: '#696969', margin: '2px 0 0' }}>
+                      Gunakan koin Rp 100 / 200 / 500 / 1000 di atas meja datar
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsGuideZoomOpen(false)}
+                    aria-label="Tutup pratinjau panduan"
+                    style={{
+                      background: '#F8F5F2',
+                      border: '1px solid #ECE6E0',
+                      borderRadius: '50%',
+                      width: 32,
+                      height: 32,
+                      cursor: 'pointer',
+                      fontSize: 15,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#141413',
+                      flexShrink: 0,
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    width: '100%',
+                    maxHeight: '75vh',
+                    overflowY: 'auto',
+                    borderRadius: 12,
+                    border: '1px solid #EAE6E1',
+                  }}
+                >
+                  <Image
+                    src={DINAIL_ASSETS.guides.measureWithCoin}
+                    alt="Panduan cara mengukur kuku dengan koin dinail.co"
+                    width={900}
+                    height={900}
+                    sizes="(max-width: 640px) 94vw, 540px"
+                    style={{
+                      width: '100%',
+                      height: 'auto',
+                      display: 'block',
+                      borderRadius: 12,
+                    }}
+                  />
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* 2 Slot Upload Foto (grid-cols-1 sm:grid-cols-2 gap-3.5) */}
+        <div className="nail-ai-upload-grid grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {photoSlots.map((slot) => (
+            <div
+              key={slot.key}
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: slot.preview ? '1px solid #E5E0DA' : '1px dashed #D5D0C8',
+                borderRadius: 14,
+                padding: 12,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                minWidth: 0,
+                boxSizing: 'border-box',
+              }}
+            >
+              <div>
+                <p style={{ fontSize: 12.5, fontWeight: 600, color: '#141413', margin: 0, lineHeight: 1.35 }}>
+                  {slot.label}
+                </p>
+                <p style={{ fontSize: 11.5, color: '#696969', margin: '2px 0 0', lineHeight: 1.4 }}>
+                  {slot.hint}
+                </p>
+              </div>
+
+              {slot.preview ? (
+                <div
+                  className="aspect-[4/3] rounded-xl"
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    aspectRatio: '4 / 3',
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    backgroundColor: '#F3F0EE',
+                    border: '1px solid #EAE6E1',
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={slot.preview}
+                    alt={slot.label}
+                    className="object-cover"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                  />
+
+                  {/* Tombol Hapus (-) & Ganti Foto di Pojok Kanan Atas */}
+                  {!isScanning && (
+                    <div
+                      className="flex items-center gap-1.5"
+                      style={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        zIndex: 4,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSlotPhoto(slot.key)}
+                        title="Hapus Foto"
+                        aria-label="Hapus Foto"
+                        className="w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-sm transition-colors"
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: '50%',
+                          backgroundColor: '#EF4444',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          padding: 0,
+                          boxShadow: '0 2px 6px rgba(20, 20, 19, 0.2)',
+                          transition: 'background-color 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#DC2626';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#EF4444';
+                        }}
+                      >
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => slot.inputRef.current?.click()}
+                        style={{
+                          backgroundColor: 'rgba(20, 20, 19, 0.78)',
+                          backdropFilter: 'blur(6px)',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: 999,
+                          padding: '6px 10px',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        Ganti Foto
+                      </button>
+                    </div>
+                  )}
+
+                  {/* State 2: Overlay Efek Garis Scanning #F37338 Bergerak Naik-Turun */}
+                  {isScanning && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        zIndex: 5,
+                        backgroundColor: 'rgba(20, 20, 19, 0.24)',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      <motion.div
+                        initial={{ top: '6%' }}
+                        animate={{ top: ['6%', '92%', '6%'] }}
+                        transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          right: 0,
+                          height: 2,
+                          backgroundColor: '#F37338',
+                          boxShadow: '0 0 12px 2px rgba(243, 115, 56, 0.75)',
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => slot.inputRef.current?.click()}
+                  style={{
+                    width: '100%',
+                    aspectRatio: '4 / 3',
+                    borderRadius: 12,
+                    border: 'none',
+                    backgroundColor: '#FAF7F5',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    padding: 14,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    color: '#141413',
+                    transition: 'background-color 0.18s ease',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 12,
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #EAE6E1',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#F37338',
+                    }}
+                  >
+                    <IconCamera size={20} />
+                  </span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: '#141413' }}>
+                    Pilih / Ambil Foto
+                  </span>
+                  <span style={{ fontSize: 11, color: '#767676' }}>
+                    Kamera atau Galeri (JPG / PNG)
+                  </span>
+                </button>
+              )}
+
+              <input
+                ref={slot.inputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleSelectSlotPhoto(slot.key, e)}
+                style={{ display: 'none' }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Tombol Analisis AI & Status Progres Dinamis */}
+        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn-primary profil-mobile-full-btn"
+              disabled={!isReadyToAnalyze}
+              onClick={handleAnalyzeWithAI}
+              style={{
+                padding: '11px 22px',
+                fontSize: 13.5,
+                fontWeight: 600,
+                opacity: isReadyToAnalyze ? 1 : 0.45,
+                cursor: isReadyToAnalyze ? 'pointer' : 'not-allowed',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                <line x1="7" y1="12" x2="17" y2="12" />
+              </svg>
+              <span>{isScanning ? 'Sedang Menganalisis...' : 'Analisis Ukuran dengan AI'}</span>
+            </button>
+
+            {isScanning && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  color: '#CF4500',
+                }}
+              >
+                <motion.span
+                  animate={{ opacity: [0.35, 1, 0.35] }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: '#F37338',
+                    display: 'inline-block',
+                    flexShrink: 0,
+                  }}
+                />
+                <span>{AI_SCAN_STEPS[aiStepIndex]}</span>
+              </div>
+            )}
+          </div>
+
+          {/* State 3: Banner Berhasil + Auto-Fill */}
+          <AnimatePresence>
+            {aiStatus === 'success' && aiResult && (
+              <motion.div
+                key="ai-result-success"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.22 }}
+                className="rounded-2xl"
+                style={{
+                  backgroundColor: '#FFF5F0',
+                  border: '1px solid rgba(243, 115, 56, 0.3)',
+                  borderRadius: 16,
+                  padding: 14,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      backgroundColor: '#F37338',
+                      display: 'inline-block',
+                      flexShrink: 0,
+                    }}
+                    aria-hidden="true"
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#141413' }}>
+                    Analisis AI Selesai — Rekomendasi:{' '}
+                    {aiResult.recommendedPreset === 'Kustom'
+                      ? 'Kustom'
+                      : `Size ${aiResult.recommendedPreset}`}
+                    {aiResult.confidenceScore ? ` (Akurasi ${aiResult.confidenceScore}%)` : ''}
+                  </span>
+                </div>
+                <p style={{ fontSize: 12, color: '#57534E', margin: 0, lineHeight: 1.5, paddingLeft: 16 }}>
+                  Angka di bawah sudah terisi otomatis. Kamu tetap bisa menyesuaikan secara manual sebelum menyimpan.
+                </p>
+              </motion.div>
+            )}
+
+            {/* State 4: Banner Gagal Deteksi / Error */}
+            {aiStatus === 'error' && aiError && (
+              <motion.div
+                key="ai-result-error"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.22 }}
+                className="rounded-2xl"
+                style={{
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  color: '#B91C1C',
+                  borderRadius: 16,
+                  padding: 14,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: '1 1 220px', minWidth: 0 }}>
+                  <span style={{ flexShrink: 0, marginTop: 1 }}>
+                    <IconAlertTriangle size={17} />
+                  </span>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 2px', color: '#991B1B' }}>
+                      Gagal Mendeteksi Ukuran Kuku
+                    </p>
+                    <p style={{ fontSize: 12, margin: 0, lineHeight: 1.5, color: '#B91C1C' }}>
+                      {aiError}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRetryPhotos}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #FCA5A5',
+                    borderRadius: 999,
+                    padding: '6px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#B91C1C',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                  }}
+                >
+                  Coba Foto Ulang
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* 3. Pilihan Preset Cepat (Flat Minimalis) */}
+      <div style={{ marginBottom: 24 }}>
+        <span style={{ display: 'block', fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', color: '#141413', textTransform: 'uppercase', marginBottom: 10 }}>
+          Pilih Preset Ukuran Cepat
+        </span>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {(['XS', 'S', 'M', 'L', 'Custom'] as const).map((sz) => {
             const isSelected = nailData.preset === sz;
@@ -1144,7 +2120,7 @@ function UkuranKukuTab() {
         </div>
       </div>
 
-      {/* 3. Detail Ukuran Per Jari (Tabel / List Flat 2 Kolom) */}
+      {/* 4. Detail Ukuran Per Jari (Tabel / List Flat 2 Kolom) */}
       <div style={{ marginBottom: 32 }}>
         <div
           style={{
@@ -1299,155 +2275,8 @@ function UkuranKukuTab() {
         </div>
       </div>
 
-      {/* 4. Pengecekan Ukuran Kuku via Foto */}
-      <div style={{ marginTop: 40, paddingTop: 32, borderTop: '1px solid #EAE6E1' }}>
-        <div style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#141413', margin: 0 }}>
-            Pengecekan Ukuran Kuku via Foto
-          </h3>
-          <p style={{ fontSize: 13, color: '#696969', marginTop: 4, lineHeight: 1.5 }}>
-            Unggah foto kuku Anda bersama koin pecahan Rp 500 atau penggaris agar nail artist kami dapat memverifikasi skala kelengkungan dan ukuran kuku asli secara presisi.
-          </p>
-        </div>
-
-        <div
-          className="profil-two-col-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 36,
-            alignItems: 'start',
-          }}
-        >
-          {/* Panduan Foto */}
-          <div>
-            <h4 style={{ fontSize: 13, fontWeight: 600, color: '#141413', marginBottom: 14 }}>
-              Panduan Pengambilan Foto Presisi:
-            </h4>
-            <ol style={{ paddingLeft: 18, margin: 0, display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, color: '#555555', lineHeight: 1.5 }}>
-              <li>Posisikan jari tangan mendatar di atas permukaan meja yang rata.</li>
-              <li>Letakkan <strong>koin Rp 500</strong> atau penggaris tepat di samping kuku sebagai pembanding skala.</li>
-              <li>Ambil foto tegak lurus (90 derajat tepat dari atas kuku).</li>
-              <li>Pastikan pencahayaan terang dan foto tidak buram (buram).</li>
-            </ol>
-          </div>
-
-          {/* Area Upload Foto */}
-          <div
-            style={{
-              border: '1px dashed #D5D0C8',
-              borderRadius: 14,
-              padding: '24px 20px',
-              textAlign: 'center',
-              background: 'transparent',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: 180,
-            }}
-          >
-            {nailData.photoUrl ? (
-              <div>
-                <div
-                  style={{
-                    width: 120,
-                    height: 120,
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                    position: 'relative',
-                    margin: '0 auto 12px',
-                    border: '1px solid #EAE6E1',
-                  }}
-                >
-                  <Image
-                    src={nailData.photoUrl}
-                    alt="Pratinjau Foto Ukuran Kuku"
-                    width={120}
-                    height={120}
-                    style={{ objectFit: 'cover', width: '100%', height: '100%' }}
-                  />
-                </div>
-                <p style={{ fontSize: 13, color: '#16A34A', fontWeight: 600, marginBottom: 8 }}>
-                  Foto Ukuran Kuku Berhasil Diunggah
-                </p>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      fontSize: 12,
-                      color: '#141413',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      textDecoration: 'underline',
-                    }}
-                  >
-                    Ganti Foto
-                  </button>
-                  <span style={{ color: '#D5D0C8' }}>·</span>
-                  <button
-                    type="button"
-                    onClick={handleRemovePhoto}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      fontSize: 12,
-                      color: '#DC2626',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Hapus
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: '#767676' }}>
-                  <IconCamera size={26} />
-                </div>
-                <p style={{ fontWeight: 600, fontSize: 13, color: '#141413', marginBottom: 2 }}>
-                  Unggah Foto Jari &amp; Kuku Anda
-                </p>
-                <p style={{ fontSize: 12, color: '#767676', marginBottom: 14 }}>
-                  Mendukung format JPG atau PNG (Maks. 5 MB)
-                </p>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    background: 'transparent',
-                    border: '1px solid #D5D0C8',
-                    borderRadius: 8,
-                    padding: '7px 16px',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: '#141413',
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  Pilih File Foto
-                </button>
-              </div>
-            )}
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handlePhotoUpload}
-              style={{ display: 'none' }}
-            />
-          </div>
-        </div>
-      </div>
-
       {/* 5. Tombol Simpan & Alert Feedback */}
-      <div style={{ marginTop: 36, paddingTop: 24, borderTop: '1px solid #EAE6E1' }}>
+      <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid #EAE6E1' }}>
         {saveSuccess && (
           <div
             style={{
@@ -1464,7 +2293,10 @@ function UkuranKukuTab() {
               gap: 8,
             }}
           >
-            <span>✓ Data ukuran kuku dan foto berhasil disimpan ke profil Anda!</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>Data ukuran kuku berhasil disimpan ke profil Anda.</span>
           </div>
         )}
 
@@ -1630,17 +2462,22 @@ function KonsultasiTab({
     fetchUserConsultations();
   }, [userId, userProfileName]);
 
+  const matchesStatusTab = (orderStatus: string, targetTab: OrderStatus | 'semua') => {
+    const norm = (orderStatus || '').toLowerCase();
+    return (
+      targetTab === 'semua' ||
+      norm === targetTab.toLowerCase() ||
+      (targetTab === 'menunggu' && (norm === 'antrian' || norm === 'menunggu' || norm === 'pending')) ||
+      (targetTab === 'siap_checkout' && (norm === 'disetujui' || norm === 'siap_checkout' || norm === 'confirmed')) ||
+      (targetTab === 'proses' && (norm === 'proses' || norm === 'in_progress')) ||
+      (targetTab === 'selesai' && (norm === 'selesai' || norm === 'completed')) ||
+      (targetTab === 'dibatalkan' && (norm === 'ditolak' || norm === 'dibatalkan' || norm === 'cancelled'))
+    );
+  };
+
   // Filter real-time berdasarkan Tab Status dan Search Bar
   const filtered = orders.filter((o) => {
-    const norm = (o.status || '').toLowerCase();
-    const matchStatus =
-      activeStatus === 'semua' ||
-      norm === activeStatus.toLowerCase() ||
-      (activeStatus === 'menunggu' && (norm === 'antrian' || norm === 'menunggu' || norm === 'pending')) ||
-      (activeStatus === 'siap_checkout' && (norm === 'disetujui' || norm === 'siap_checkout' || norm === 'confirmed')) ||
-      (activeStatus === 'proses' && (norm === 'proses' || norm === 'in_progress')) ||
-      (activeStatus === 'selesai' && (norm === 'selesai' || norm === 'completed')) ||
-      (activeStatus === 'dibatalkan' && (norm === 'ditolak' || norm === 'dibatalkan' || norm === 'cancelled'));
+    const matchStatus = matchesStatusTab(o.status, activeStatus);
     const q = searchQuery.toLowerCase().trim();
     const matchSearch =
       !q ||
@@ -1698,20 +2535,24 @@ function KonsultasiTab({
       minute: '2-digit',
     });
 
-    const newOrder: OrderCard = {
+    const created = createConsultation({
       consultationId: newId,
-      userId: userId || undefined,
+      userId,
       customerName: customerName.trim(),
-      nailSizeSummary: formatNailSizeSummary(savedNailData),
-      referenceLink: refLink.trim() || undefined,
-      submittedAt: `${dateLabel}, ${timeLabel}`,
-      status: 'menunggu',
-      serviceType: 'Custom Press-On Nails',
       designName: initialDesign?.trim() || 'Custom Press-On Nails',
+      serviceType: 'Custom Press-On Nails',
       variant: 'Custom',
       notes: newNotes.trim(),
-      estimasiHarga: 'Menunggu estimasi',
+      referenceLink: refLink.trim() || undefined,
       photoUrl: refPhotoUrl || DINAIL_ASSETS.catalogPreviews[0],
+      estimasiHarga: 'Menunggu estimasi',
+      submittedAt: `${dateLabel}, ${timeLabel}`,
+      fallbackNailSize: savedNailData,
+    });
+
+    const newOrder: OrderCard = {
+      ...created,
+      status: 'menunggu',
     };
 
     const updated = [newOrder, ...orders];
@@ -1735,6 +2576,8 @@ function KonsultasiTab({
             variant: newOrder.variant,
             referenceLink: newOrder.referenceLink,
             photoUrl: newOrder.photoUrl,
+            nailPhotos: newOrder.nailPhotos,
+            aiConfidenceScore: newOrder.aiConfidenceScore,
             customerNotes: newOrder.notes,
             estimatedPrice: newOrder.estimasiHarga,
             customerName: newOrder.customerName,
@@ -1764,6 +2607,7 @@ function KonsultasiTab({
     <div>
       {/* Judul + tombol tambah */}
       <div
+        className="profil-konsultasi-header"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -1786,7 +2630,7 @@ function KonsultasiTab({
           className="btn-primary profil-mobile-full-btn"
           style={{ padding: '10px 22px', fontSize: 13 }}
           onClick={() => {
-            setSavedNailData(getSavedNailData());
+            setSavedNailData(getSavedNailData(userId));
             setShowNewForm((v) => !v);
           }}
         >
@@ -1948,7 +2792,7 @@ function KonsultasiTab({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      Ukur Kuku Sekarang →
+                      Ukur Kuku Sekarang
                     </button>
                   )}
                 </div>
@@ -2135,15 +2979,87 @@ function KonsultasiTab({
                 onClick={handleSubmitNew}
                 disabled={!savedNailData || !customerName.trim()}
               >
-                Kirim Pengajuan Konsultasi →
+                Kirim Pengajuan Konsultasi
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Baris Tab Status Horizontal */}
-      <div className="profil-status-tabs" style={{ marginBottom: 16 }}>
+      {/* Dropdown Filter Status (Khusus Mobile & Tablet < 1024px) */}
+      <div
+        className="block lg:hidden profil-status-dropdown-mobile relative mt-4 mb-3"
+        style={{ position: 'relative', marginTop: 16, marginBottom: 12 }}
+      >
+        <select
+          aria-label="Filter Status Konsultasi"
+          value={activeStatus}
+          onChange={(e) => setActiveStatus(e.target.value as OrderStatus | 'semua')}
+          className="profil-status-select w-full appearance-none bg-white border border-[#EAE6E1] rounded-xl px-4 py-3 pr-10 text-[14px] font-medium text-[#141413] focus:outline-none focus:border-[#F37338]"
+          style={{
+            width: '100%',
+            appearance: 'none',
+            WebkitAppearance: 'none',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #EAE6E1',
+            borderRadius: 12,
+            padding: '12px 40px 12px 16px',
+            fontSize: 14,
+            fontWeight: 500,
+            color: '#141413',
+            fontFamily: 'inherit',
+            cursor: 'pointer',
+            outline: 'none',
+            transition: 'border-color 0.2s ease',
+          }}
+        >
+          {TAB_LIST.map((tab) => {
+            const count = orders.filter((o) => matchesStatusTab(o.status, tab.key)).length;
+            const baseLabel =
+              tab.key === 'semua'
+                ? 'Semua Status'
+                : tab.key === 'dibatalkan'
+                ? 'Ditolak'
+                : tab.label;
+            return (
+              <option key={`mobile-status-opt-${tab.key}`} value={tab.key}>
+                {count > 0 ? `${baseLabel} (${count})` : baseLabel}
+              </option>
+            );
+          })}
+        </select>
+        <span
+          className="pointer-events-none"
+          style={{
+            position: 'absolute',
+            right: 14,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: '#696969',
+            pointerEvents: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          aria-hidden="true"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      </div>
+
+      {/* Baris Tab Status Horizontal (Khusus Desktop >= 1024px — Utuh) */}
+      <div className="hidden lg:flex profil-status-tabs" style={{ marginBottom: 16 }}>
         {TAB_LIST.map((tab) => {
           const isActive = activeStatus === tab.key;
           return (
@@ -2189,7 +3105,7 @@ function KonsultasiTab({
         </span>
         <input
           type="text"
-          placeholder="Cari berdasarkan ID Konsultasi, nama desain, atau variasi kuku..."
+          placeholder="Cari berdasarkan ID Konsultasi"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{
@@ -2360,7 +3276,7 @@ function KonsultasiTab({
                   className="btn-primary"
                   style={{ padding: '12px 28px', fontSize: 14 }}
                   onClick={() => {
-                    setSavedNailData(getSavedNailData());
+                    setSavedNailData(getSavedNailData(userId));
                     setShowNewForm(true);
                   }}
                 >
@@ -2964,7 +3880,7 @@ function AkunTab({
                 {[
                   { label: 'ID User', value: userId || 'DNL-USR-8492', isMonospace: true },
                   { label: 'Nama Lengkap', value: profile.name },
-                  { label: 'Email Terdaftar', value: profile.email, note: 'Email Utama' },
+                  { label: 'Email Terdaftar', value: profile.email },
                   { label: 'Nomor WhatsApp', value: profile.phone || '-' },
                   { label: 'Kota / Wilayah', value: profile.city || '-' },
                 ].map((item, idx, arr) => (
@@ -2999,22 +3915,6 @@ function AkunTab({
                       >
                         {item.value}
                       </span>
-                      {item.note && (
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 600,
-                            color: '#16A34A',
-                            background: '#F0FDF4',
-                            border: '1px solid #BBF7D0',
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {item.note}
-                        </span>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -3264,7 +4164,7 @@ function ProfileContent() {
               style={{ padding: '13px 34px', fontSize: 15 }}
               onClick={openModal}
             >
-              Masuk / Daftar Sekarang →
+              Masuk / Daftar Sekarang
             </button>
           </div>
         </main>
@@ -3495,7 +4395,7 @@ function ProfileContent() {
                         flexShrink: 0,
                       }}
                     >
-                      Atur Sekarang →
+                      Atur Sekarang
                     </button>
                   </div>
                 )}
@@ -3835,7 +4735,7 @@ function ProfileContent() {
                         onOpenEdit={() => setIsEditProfileOpen(true)}
                       />
                     )}
-                    {mobileView === 'ukuran' && <UkuranKukuTab />}
+                    {mobileView === 'ukuran' && <UkuranKukuTab userId={userId} />}
                     {mobileView === 'konsultasi' && (
                       <KonsultasiTab
                         key={`mobile-kns-${userId || 'guest'}-${profile.name}-${mobileKonsultasiStatus}-${mobileOpenKonsultasiForm}`}
@@ -4042,7 +4942,7 @@ function ProfileContent() {
                     transition: 'color 0.2s',
                   }}
                 >
-                  → Lihat Catalog
+                  Lihat Catalog
                 </Link>
                 <Link
                   href="/pricelist"
@@ -4056,7 +4956,7 @@ function ProfileContent() {
                     transition: 'color 0.2s',
                   }}
                 >
-                  → Cek Daftar Harga
+                  Cek Daftar Harga
                 </Link>
                 {(currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner') && (
                   <Link
@@ -4071,7 +4971,7 @@ function ProfileContent() {
                       transition: 'opacity 0.2s',
                     }}
                   >
-                    → Dashboard Admin
+                    Dashboard Admin
                   </Link>
                 )}
                 {(currentRole === 'owner' || currentUser?.role === 'owner') && (
@@ -4087,7 +4987,7 @@ function ProfileContent() {
                       transition: 'opacity 0.2s',
                     }}
                   >
-                    → Dashboard Owner
+                    Dashboard Owner
                   </Link>
                 )}
               </div>
@@ -4103,7 +5003,7 @@ function ProfileContent() {
                 />
               )}
               {activeMenu === 'ukuran' && (
-                <UkuranKukuTab />
+                <UkuranKukuTab userId={userId} />
               )}
               {activeMenu === 'konsultasi' && (
                 <KonsultasiTab

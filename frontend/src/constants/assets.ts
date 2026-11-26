@@ -80,6 +80,11 @@ export const DINAIL_ASSETS = {
     squareExtraLong: '' as string, // '/images/shapes/square-extra-long.webp'
     squovalShort:    '' as string, // '/images/shapes/squoval-short.webp'
   },
+
+  /** Gambar panduan visual untuk pelanggan */
+  guides: {
+    measureWithCoin: '/images/panduan-ukur-koin.webp',
+  },
 } as const;
 
 export type DinailAssets = typeof DINAIL_ASSETS;

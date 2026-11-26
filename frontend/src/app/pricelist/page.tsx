@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
@@ -14,7 +14,6 @@ import { DINAIL_ASSETS } from '@/constants/assets';
 
 interface TierPackage {
   id: string;
-  tier: string;
   fullName: string;
   img: string;
   priceFrom: number;
@@ -23,7 +22,6 @@ interface TierPackage {
   priceToNormal?: number;
   discount?: number;
   shipping: string;
-  tags: string[];
   rating: number;
   reviewCount?: number;
   favorites: number;
@@ -35,8 +33,7 @@ interface TierPackage {
 const TIER_PACKAGES: TierPackage[] = [
   {
     id: 'basic',
-    tier: 'Custom Premium — Basic',
-    fullName: 'CUSTOM PRESS ON NAILS PREMIUM BASIC by dinail.co',
+    fullName: 'Basic Tier',
     img: DINAIL_ASSETS.priceList.basic,
     priceFrom: 59999,
     priceTo: 110160,
@@ -44,7 +41,6 @@ const TIER_PACKAGES: TierPackage[] = [
     priceToNormal: 152999,
     discount: 28,
     shipping: 'Pengerjaan cepat — Reguler',
-    tags: ['Handmade', 'Customable', 'Reusable'],
     rating: 5.0,
     reviewCount: 73,
     favorites: 234,
@@ -52,8 +48,7 @@ const TIER_PACKAGES: TierPackage[] = [
   },
   {
     id: 'classic',
-    tier: 'Custom Premium — Classic',
-    fullName: 'CUSTOM PRESS ON NAILS PREMIUM CLASSIC by dinail.co',
+    fullName: 'Classic Tier',
     img: DINAIL_ASSETS.priceList.classic,
     priceFrom: 69999,
     priceTo: 134900,
@@ -61,7 +56,6 @@ const TIER_PACKAGES: TierPackage[] = [
     priceToNormal: 189999,
     discount: 29,
     shipping: 'Pre-Order · dikirim dalam 10 hari',
-    tags: ['Handmade', 'Customable', 'Reusable'],
     rating: 5.0,
     reviewCount: 452,
     favorites: 902,
@@ -71,8 +65,7 @@ const TIER_PACKAGES: TierPackage[] = [
   },
   {
     id: 'luxury',
-    tier: 'Custom Premium — Luxury',
-    fullName: 'CUSTOM PRESS ON NAILS PREMIUM LUXURY by dinail.co',
+    fullName: 'Luxury Tier',
     img: DINAIL_ASSETS.priceList.luxury,
     priceFrom: 89999,
     priceTo: 184690,
@@ -80,7 +73,6 @@ const TIER_PACKAGES: TierPackage[] = [
     priceToNormal: 252999,
     discount: 29,
     shipping: 'Pre-Order · dikirim dalam 13 hari',
-    tags: ['Handmade', 'Customable', 'Reusable'],
     rating: 5.0,
     reviewCount: 333,
     favorites: 769,
@@ -88,8 +80,7 @@ const TIER_PACKAGES: TierPackage[] = [
   },
   {
     id: 'prestige',
-    tier: 'Custom Premium — Prestige',
-    fullName: 'CUSTOM PRESS ON NAILS PREMIUM PRESTIGE by dinail.co',
+    fullName: 'Prestige Tier',
     img: DINAIL_ASSETS.priceList.prestige,
     priceFrom: 100999,
     priceTo: 324470,
@@ -97,7 +88,6 @@ const TIER_PACKAGES: TierPackage[] = [
     priceToNormal: 456999,
     discount: 29,
     shipping: 'Pre-Order · dikirim dalam 15 hari',
-    tags: ['Handmade', 'Customable', 'Reusable'],
     rating: 5.0,
     reviewCount: 45,
     favorites: 400,
@@ -236,7 +226,7 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
       style={{ display: 'flex', height: '100%', minWidth: 0 }}
     >
       <motion.article
-        className="pricelist-card"
+        className="pricelist-card flex flex-col justify-between h-full"
         whileHover={{ y: -4, transition: { duration: 0.25, ease: 'easeOut' } }}
         style={{
           backgroundColor: '#FFFFFF',
@@ -250,6 +240,7 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
           position: 'relative',
           overflow: 'hidden',
           width: '100%',
+          height: '100%',
         }}
       >
       {/* Badge Diskon Compact di Pojok Gambar (Khusus Mobile < 640px) */}
@@ -282,7 +273,7 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
 
       {/* Cover Image — 1:1 ratio */}
       <div
-        className="pricelist-card-img"
+        className="pricelist-card-img aspect-square w-full"
         style={{
           position: 'relative',
           width: '100%',
@@ -294,43 +285,17 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
       >
         <Image
           src={pkg.img}
-          alt={pkg.fullName}
+          alt={`${pkg.fullName} — Custom Press On Nails dinail.co`}
           fill
+          className="object-cover"
           style={{ objectFit: 'cover' }}
-          sizes="(max-width: 640px) 48vw, (max-width: 1200px) 50vw, 400px"
+          sizes="(max-width: 640px) 48vw, (max-width: 1024px) 48vw, 25vw"
         />
-        {/* Overlay gradient bawah untuk legibility */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(to bottom, transparent 55%, rgba(20,20,19,0.28) 100%)',
-          }}
-        />
-        {/* Tier badge di dalam gambar */}
-        <div
-          className="pricelist-tier-badge"
-          style={{
-            position: 'absolute',
-            bottom: 16,
-            left: 16,
-            backgroundColor: 'rgba(255,255,255,0.92)',
-            backdropFilter: 'blur(8px)',
-            borderRadius: 999,
-            padding: '5px 14px',
-            fontSize: 12,
-            fontWeight: 700,
-            color: '#141413',
-            letterSpacing: '0.03em',
-          }}
-        >
-          {pkg.tier}
-        </div>
       </div>
 
       {/* Card Body */}
-      <div className="pricelist-card-body" style={{ padding: '24px 24px 28px', display: 'flex', flexDirection: 'column', flex: 1, gap: 0 }}>
-
+      <div className="pricelist-card-body lg:p-4 flex flex-col justify-between flex-1" style={{ padding: '24px 24px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1, gap: 0 }}>
+        <div style={{ minWidth: 0 }}>
         {/* Stats Row */}
         <div
           className="pricelist-stats-row"
@@ -370,45 +335,24 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
 
         {/* Product Name */}
         <h3
-          className="pricelist-card-title"
+          className="pricelist-card-title lg:text-[18px]"
           style={{
-            fontSize: 15,
+            fontSize: 18,
             fontWeight: 600,
             color: '#141413',
-            lineHeight: 1.4,
-            letterSpacing: '-0.01em',
+            lineHeight: 1.3,
+            letterSpacing: '-0.02em',
             marginBottom: 16,
           }}
         >
           {pkg.fullName}
         </h3>
 
-        {/* Tags */}
-        <div className="pricelist-tags-row" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 18 }}>
-          {pkg.tags.map((tag) => (
-            <span
-              key={tag}
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: '#141413',
-                backgroundColor: '#F3F0EE',
-                border: '1px solid #DED8D0',
-                borderRadius: 999,
-                padding: '3px 10px',
-                letterSpacing: '0.03em',
-              }}
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-
         {/* Price Block — Flat Typography (No Box / No Border) */}
         <div
           className="pricelist-price-block"
           style={{
-            margin: '6px 0 22px 0',
+            margin: '0 0 18px 0',
             display: 'flex',
             flexDirection: 'column',
             gap: 6,
@@ -416,13 +360,13 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span
-              className="pricelist-price-main"
+              className="pricelist-price-main lg:text-[16px] font-bold"
               style={{
-                fontSize: 'clamp(21px, 2.2vw, 25px)',
+                fontSize: 'clamp(18px, 2vw, 22px)',
                 fontWeight: 700,
                 color: '#141413',
                 letterSpacing: '-0.025em',
-                lineHeight: 1.2,
+                lineHeight: 1.25,
               }}
             >
               {formatRupiah(pkg.priceFrom)} – {formatRupiah(pkg.priceTo)}
@@ -448,13 +392,20 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
             )}
           </div>
 
-          {/* Harga normal dicoret tanpa pembatas atau sekat box */}
+          {/* Harga normal dicoret ringkas */}
           {pkg.priceToNormal && pkg.priceToNormal !== pkg.priceTo && (
-            <p className="pricelist-price-normal" style={{ fontSize: 12.5, color: '#969696', fontWeight: 400, margin: 0, lineHeight: 1.4 }}>
-              <span className="pricelist-price-normal-prefix">Harga normal:{' '}</span>
-              <span style={{ textDecoration: 'line-through', color: '#A09B95' }}>
-                {formatRupiah(pkg.priceFromNormal ?? pkg.priceFrom)} – {formatRupiah(pkg.priceToNormal)}
-              </span>
+            <p
+              className="pricelist-price-normal text-[11px] text-[#71717A]"
+              style={{
+                fontSize: 11,
+                color: '#71717A',
+                fontWeight: 400,
+                margin: 0,
+                lineHeight: 1.4,
+                textDecoration: 'line-through',
+              }}
+            >
+              {formatRupiah(pkg.priceFromNormal ?? pkg.priceFrom)} – {formatRupiah(pkg.priceToNormal)}
             </p>
           )}
         </div>
@@ -466,7 +417,7 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
             display: 'flex',
             alignItems: 'flex-start',
             gap: 8,
-            marginBottom: 24,
+            marginBottom: 22,
           }}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#696969" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}>
@@ -475,14 +426,15 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
             <circle cx="5.5" cy="18.5" r="2.5" />
             <circle cx="18.5" cy="18.5" r="2.5" />
           </svg>
-          <p style={{ fontSize: 12, color: '#696969', lineHeight: 1.5 }}>{pkg.shipping}</p>
+          <p className="lg:text-[12px]" style={{ fontSize: 12, color: '#696969', lineHeight: 1.5 }}>{pkg.shipping}</p>
+        </div>
         </div>
 
         {/* CTA Buttons — push to bottom */}
-        <div className="pricelist-cta-group" style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="pricelist-cta-group mt-auto" style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Link
             href="/profil#konsultasi"
-            className="btn-primary pricelist-cta-btn"
+            className="btn-primary pricelist-cta-btn w-full lg:text-[13px] lg:py-2.5"
             style={{
               width: '100%',
               padding: '13px 20px',
@@ -491,14 +443,14 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
               letterSpacing: '-0.01em',
             }}
           >
-            <span className="cta-label-desktop">Konsultasi Paket Ini →</span>
-            <span className="cta-label-mobile">Konsultasi →</span>
+            <span className="cta-label-desktop">Konsultasi Paket Ini</span>
+            <span className="cta-label-mobile">Konsultasi</span>
           </Link>
           <a
             href={pkg.shopeeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn-secondary pricelist-cta-btn"
+            className="btn-secondary pricelist-cta-btn w-full lg:text-[13px] lg:py-2.5"
             style={{
               width: '100%',
               padding: '12px 20px',
@@ -507,8 +459,8 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
               letterSpacing: '-0.01em',
             }}
           >
-            <span className="cta-label-desktop">Lihat di Shopee ↗</span>
-            <span className="cta-label-mobile">Shopee ↗</span>
+            <span className="cta-label-desktop">Lihat di Shopee</span>
+            <span className="cta-label-mobile">Shopee</span>
           </a>
         </div>
       </div>
@@ -756,7 +708,6 @@ function ShapeGuideSection() {
             }}
           >
             <span>Mulai Konsultasi</span>
-            <span aria-hidden="true">→</span>
           </Link>
         </div>
       </div>
@@ -767,10 +718,7 @@ function ShapeGuideSection() {
 // PAGE
 
 export default function PriceListPage() {
-  const [activeFilter, setActiveFilter] = useState<string>('Semua');
-  const [isTierDropdownOpen, setIsTierDropdownOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const tierDropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -778,27 +726,6 @@ export default function PriceListPage() {
     }, 400);
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    const handleOutside = (e: MouseEvent | TouchEvent) => {
-      if (tierDropdownRef.current && !tierDropdownRef.current.contains(e.target as Node)) {
-        setIsTierDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutside);
-    document.addEventListener('touchstart', handleOutside, { passive: true });
-    return () => {
-      document.removeEventListener('mousedown', handleOutside);
-      document.removeEventListener('touchstart', handleOutside);
-    };
-  }, []);
-
-  const filters = ['Semua', 'Basic', 'Classic', 'Luxury', 'Prestige'];
-
-  const filteredPackages = TIER_PACKAGES.filter((pkg) => {
-    if (activeFilter === 'Semua') return true;
-    return pkg.id === activeFilter.toLowerCase();
-  });
 
   return (
     <main style={{ backgroundColor: '#F3F0EE', minHeight: '100vh', overflowX: 'clip' }}>
@@ -808,251 +735,71 @@ export default function PriceListPage() {
       <section
         className="pricelist-header-section"
         style={{
-          paddingTop: 148,
-          paddingBottom: 56,
+          paddingTop: 128,
+          paddingBottom: 0,
           paddingLeft: 24,
           paddingRight: 24,
         }}
       >
         <div style={{ maxWidth: 1120, margin: '0 auto', textAlign: 'center' }}>
           <div className="pricelist-header-intro">
-          {/* Eyebrow */}
-          <p
-            style={{
-              fontSize: '13px',
-              fontWeight: 700,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              lineHeight: 1,
-              color: '#141413',
-              marginBottom: 16,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '10px',
-            }}
-          >
-            <span
+            {/* Eyebrow */}
+            <p
               style={{
-                width: '11px',
-                height: '11px',
-                borderRadius: '50%',
-                backgroundColor: '#F37338',
-                flexShrink: 0,
-                display: 'inline-block',
-              }}
-              aria-hidden="true"
-            />
-            PRICE LIST &amp; TIER KUSTOMISASI
-          </p>
-
-          {/* Headline */}
-          <RevealTitle
-            as="h1"
-            text="Transparansi Harga untuk Setiap Detail Seni Kuku."
-            style={{
-              fontSize: 'clamp(30px, 5vw, 54px)',
-              fontWeight: 500,
-              letterSpacing: '-0.03em',
-              color: '#141413',
-              lineHeight: 1.05,
-              maxWidth: 780,
-              margin: '0 auto 18px',
-            }}
-          />
-
-          {/* Subheadline */}
-          <p
-            style={{
-              fontSize: 17,
-              fontWeight: 400,
-              color: '#141413',
-              maxWidth: 580,
-              margin: '0 auto 40px',
-              lineHeight: 1.55,
-            }}
-          >
-            Seluruh paket dinail.co adalah <strong style={{ color: '#141413', fontWeight: 600 }}>handmade</strong>, <strong style={{ color: '#141413', fontWeight: 600 }}>customable</strong>, dan <strong style={{ color: '#141413', fontWeight: 600 }}>reusable</strong> — dikerjakan dengan ukuran presisi sesuai kuku kamu.
-          </p>
-
-          {/* Rating Summary Badge */}
-          <div
-            className="pricelist-rating-badge"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 10,
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E8E2DA',
-              borderRadius: 999,
-              padding: '10px 22px',
-              marginBottom: 40,
-              boxShadow: '0px 2px 12px rgba(0,0,0,0.04)',
-            }}
-          >
-            <span style={{ fontSize: 16, fontWeight: 700, color: '#F37338' }}>★ 5.0</span>
-            <span style={{ width: 1, height: 18, backgroundColor: '#E8E2DA' }} />
-            <span style={{ fontSize: 13, color: '#696969' }}>900+ Penilaian Terverifikasi di Shopee</span>
-            <span style={{ width: 1, height: 18, backgroundColor: '#E8E2DA' }} />
-            <span style={{ fontSize: 13, color: '#141413', fontWeight: 600 }}>2.326 Favorit</span>
-          </div>
-          </div>
-
-          {/* Mobile Tier Dropdown (< 640px) */}
-          <div ref={tierDropdownRef} className="block sm:hidden mobile-tier-dropdown-wrap">
-            <button
-              type="button"
-              onClick={() => setIsTierDropdownOpen((prev) => !prev)}
-              aria-expanded={isTierDropdownOpen}
-              aria-haspopup="listbox"
-              style={{
-                width: '100%',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E5E0DA',
-                borderRadius: 999,
-                padding: '12px 18px',
-                fontSize: 14,
-                fontWeight: 500,
+                fontSize: '13px',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                lineHeight: 1,
                 color: '#141413',
-                display: 'flex',
+                marginBottom: 16,
+                display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                boxShadow: '0px 2px 10px rgba(20, 20, 19, 0.04)',
+                gap: '10px',
               }}
             >
-              <span>
-                <span style={{ color: '#6B6B6B', fontWeight: 400 }}>Kategori Tier: </span>
-                <strong style={{ color: '#141413', fontWeight: 600 }}>{activeFilter}</strong>
-              </span>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#141413"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+              <span
                 style={{
+                  width: '11px',
+                  height: '11px',
+                  borderRadius: '50%',
+                  backgroundColor: '#F37338',
                   flexShrink: 0,
-                  transform: isTierDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.2s ease',
+                  display: 'inline-block',
                 }}
                 aria-hidden="true"
-              >
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </button>
+              />
+              PRICE LIST &amp; TIER KUSTOMISASI
+            </p>
 
-            <AnimatePresence>
-              {isTierDropdownOpen && (
-                <motion.div
-                  role="listbox"
-                  aria-label="Pilih Kategori Tier"
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
-                  style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 8px)',
-                    left: 0,
-                    right: 0,
-                    zIndex: 50,
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #E5E0DA',
-                    borderRadius: 18,
-                    padding: 6,
-                    boxShadow: '0px 14px 32px rgba(20, 20, 19, 0.12)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
-                  }}
-                >
-                  {filters.map((f) => {
-                    const isActive = activeFilter === f;
-                    return (
-                      <button
-                        key={`mobile-tier-${f}`}
-                        type="button"
-                        role="option"
-                        aria-selected={isActive}
-                        onClick={() => {
-                          setActiveFilter(f);
-                          setIsTierDropdownOpen(false);
-                        }}
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '10px 14px',
-                          borderRadius: 12,
-                          border: 'none',
-                          backgroundColor: isActive ? '#FAF7F5' : 'transparent',
-                          color: isActive ? '#F37338' : '#141413',
-                          fontSize: 14,
-                          fontWeight: isActive ? 600 : 500,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          cursor: 'pointer',
-                          fontFamily: 'inherit',
-                        }}
-                      >
-                        <span>{f}</span>
-                        {isActive && (
-                          <span
-                            style={{
-                              width: 7,
-                              height: 7,
-                              borderRadius: '50%',
-                              backgroundColor: '#F37338',
-                            }}
-                            aria-hidden="true"
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+            {/* Headline */}
+            <RevealTitle
+              as="h1"
+              text="Transparansi Harga untuk Setiap Detail Seni Kuku."
+              style={{
+                fontSize: 'clamp(30px, 5vw, 54px)',
+                fontWeight: 500,
+                letterSpacing: '-0.03em',
+                color: '#141413',
+                lineHeight: 1.05,
+                maxWidth: 780,
+                margin: '0 auto 16px',
+              }}
+            />
 
-          {/* Filter Pill Bar (>= 640px) */}
-          <div
-            className="hidden sm:flex catalog-filter-tabs scrollbar-hidden"
-            style={{
-              display: 'flex',
-              gap: 8,
-              flexWrap: 'wrap',
-            }}
-          >
-            {filters.map((f) => {
-              const isActive = activeFilter === f;
-              return (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setActiveFilter(f)}
-                  style={{
-                    padding: '9px 22px',
-                    borderRadius: 999,
-                    border: isActive ? '1.5px solid #141413' : '1px solid #D1CDC7',
-                    backgroundColor: isActive ? '#141413' : '#FFFFFF',
-                    color: isActive ? '#F3F0EE' : '#141413',
-                    fontSize: 14,
-                    fontWeight: isActive ? 600 : 400,
-                    cursor: 'pointer',
-                    transition: 'all 0.18s',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  {f}
-                </button>
-              );
-            })}
+            {/* Subheadline */}
+            <p
+              style={{
+                fontSize: 16,
+                fontWeight: 400,
+                color: '#141413',
+                maxWidth: 580,
+                margin: '0 auto',
+                lineHeight: 1.55,
+              }}
+            >
+              Seluruh paket dinail.co adalah <strong style={{ color: '#141413', fontWeight: 600 }}>handmade</strong>, <strong style={{ color: '#141413', fontWeight: 600 }}>customable</strong>, dan <strong style={{ color: '#141413', fontWeight: 600 }}>reusable</strong> — dikerjakan dengan ukuran presisi sesuai kuku kamu.
+            </p>
           </div>
         </div>
       </section>
@@ -1061,25 +808,29 @@ export default function PriceListPage() {
       <section
         className="pricelist-grid-section"
         style={{
+          paddingTop: 0,
           paddingBottom: 72,
           paddingLeft: 24,
           paddingRight: 24,
         }}
       >
-        <div style={{ maxWidth: 1120, margin: '0 auto' }}>
+        <div
+          className="pricelist-grid-wrap max-w-[1280px] mx-auto mt-6 sm:mt-8 lg:mt-10"
+          style={{ maxWidth: 1280, margin: '40px auto 0' }}
+        >
           <AnimatePresence mode="wait">
             {isLoading ? (
               <motion.div
                 key="pricelist-skeleton-grid"
-                className="pricelist-cards-grid"
+                className="pricelist-cards-grid grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                  gap: 28,
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gap: 20,
                   alignItems: 'stretch',
                 }}
               >
@@ -1095,6 +846,7 @@ export default function PriceListPage() {
                       display: 'flex',
                       flexDirection: 'column',
                       overflow: 'hidden',
+                      height: '100%',
                     }}
                   >
                     <Skeleton
@@ -1105,22 +857,18 @@ export default function PriceListPage() {
                         borderRadius: '28px 28px 0 0',
                       }}
                     />
-                    <div className="pricelist-skel-body" style={{ padding: '24px 24px 28px', display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
+                    <div className="pricelist-skel-body lg:p-4" style={{ padding: '24px 24px 28px', display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <Skeleton style={{ width: 52, height: 12, borderRadius: 6 }} />
                         <Skeleton style={{ width: 72, height: 12, borderRadius: 6 }} />
                       </div>
-                      <Skeleton style={{ width: '88%', height: 16, borderRadius: 8 }} />
-                      <div className="pricelist-skel-tags" style={{ display: 'flex', gap: 6 }}>
-                        <Skeleton style={{ width: 72, height: 22, borderRadius: 999 }} />
-                        <Skeleton style={{ width: 82, height: 22, borderRadius: 999 }} />
-                        <Skeleton style={{ width: 68, height: 22, borderRadius: 999 }} />
-                      </div>
+                      <Skeleton style={{ width: '58%', height: 18, borderRadius: 8 }} />
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                        <Skeleton style={{ width: '74%', height: 22, borderRadius: 8 }} />
+                        <Skeleton style={{ width: '74%', height: 20, borderRadius: 8 }} />
                       </div>
-                      <Skeleton style={{ width: '60%', height: 12, borderRadius: 6 }} />
-                      <div className="pricelist-cta-group" style={{ marginTop: 'auto', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <Skeleton style={{ width: '54%', height: 11, borderRadius: 6 }} />
+                      <Skeleton style={{ width: '68%', height: 12, borderRadius: 6 }} />
+                      <div className="pricelist-cta-group" style={{ marginTop: 'auto', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
                         <Skeleton style={{ width: '100%', height: 36, borderRadius: 999 }} />
                         <Skeleton style={{ width: '100%', height: 34, borderRadius: 999 }} />
                       </div>
@@ -1130,40 +878,25 @@ export default function PriceListPage() {
               </motion.div>
             ) : (
               <motion.div
-                key={`pricelist-grid-${activeFilter}`}
-                className="pricelist-cards-grid"
+                key="pricelist-grid"
+                className="pricelist-cards-grid grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                  gap: 28,
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gap: 20,
                   alignItems: 'stretch',
                 }}
               >
-                {filteredPackages.map((pkg, index) => (
+                {TIER_PACKAGES.map((pkg, index) => (
                   <TierCard key={pkg.id} pkg={pkg} index={index} />
                 ))}
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Empty state */}
-          {filteredPackages.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '80px 20px', color: '#696969' }}>
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#D1CDC7" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="16.5" y1="9.4" x2="7.5" y2="4.21" />
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                  <line x1="12" y1="22.08" x2="12" y2="12" />
-                </svg>
-              </div>
-              <p style={{ fontSize: 16 }}>Tidak ada paket yang cocok dengan filter ini.</p>
-            </div>
-          )}
         </div>
       </section>
 

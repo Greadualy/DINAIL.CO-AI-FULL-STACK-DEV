@@ -7,6 +7,8 @@ import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
 import Skeleton from '@/components/Skeleton';
 import { useRole } from '@/context/RoleContext';
+import { getNailSizeData } from '@/services/nailSizeService';
+import type { ConsultationNailPhotos } from '@/types';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -19,6 +21,8 @@ export interface AdminOrder {
   userId?: string;
   customerName?: string;
   nailSizeSummary?: string;
+  nailPhotos?: ConsultationNailPhotos;
+  aiConfidenceScore?: number;
   referenceLink?: string;
   submittedAt: string;
   status: string;
@@ -108,6 +112,8 @@ interface BackendConsultationAdmin {
   customerNotes?: string;
   estimatedPrice?: string;
   photoUrl?: string;
+  nailPhotos?: ConsultationNailPhotos;
+  aiConfidenceScore?: number;
   shopeeUrl?: string;
   adminFeedback?: string;
   reviewedAt?: string;
@@ -132,11 +138,25 @@ function mapBackendConsultation(c: BackendConsultationAdmin): AdminOrder {
     nailSizeSummary = c.confirmedSize;
   }
 
+  const resolvedUserId = c.userId || c.user?.id;
+  const localNailFallback = typeof window !== 'undefined' ? getNailSizeData(resolvedUserId) : null;
+  const nailPhotos: ConsultationNailPhotos | undefined =
+    c.nailPhotos && (c.nailPhotos.fourFingersUrl || c.nailPhotos.thumbUrl)
+      ? c.nailPhotos
+      : localNailFallback && (localNailFallback.fourFingersPhotoUrl || localNailFallback.thumbPhotoUrl)
+      ? {
+          fourFingersUrl: localNailFallback.fourFingersPhotoUrl,
+          thumbUrl: localNailFallback.thumbPhotoUrl,
+        }
+      : undefined;
+
   return {
     consultationId: c.consultationCode || c.id || 'DNL-ORD-UNKNOWN',
-    userId: c.userId || c.user?.id,
+    userId: resolvedUserId,
     customerName: c.user?.name || c.user?.email || 'Customer',
     nailSizeSummary,
+    nailPhotos,
+    aiConfidenceScore: c.aiConfidenceScore ?? localNailFallback?.aiConfidenceScore,
     referenceLink: c.referenceLink || undefined,
     submittedAt: `${dateLabel}, ${timeLabel}`,
     status: normalizeOrderStatus(c.status || 'Antrian'),
@@ -166,8 +186,23 @@ function loadAllConsultations(): AdminOrder[] {
           if (Array.isArray(list)) {
             list.forEach((ord) => {
               if (ord && ord.consultationId) {
+                const hasOwnPhotos = Boolean(
+                  ord.nailPhotos?.fourFingersUrl || ord.nailPhotos?.thumbUrl
+                );
+                const fallbackNail = !hasOwnPhotos ? getNailSizeData(ord.userId) : null;
+                const nailPhotos: ConsultationNailPhotos | undefined = hasOwnPhotos
+                  ? ord.nailPhotos
+                  : fallbackNail && (fallbackNail.fourFingersPhotoUrl || fallbackNail.thumbPhotoUrl)
+                  ? {
+                      fourFingersUrl: fallbackNail.fourFingersPhotoUrl,
+                      thumbUrl: fallbackNail.thumbPhotoUrl,
+                    }
+                  : undefined;
+
                 results.push({
                   ...ord,
+                  nailPhotos,
+                  aiConfidenceScore: ord.aiConfidenceScore ?? fallbackNail?.aiConfidenceScore,
                   storageKey: key,
                 });
               }
@@ -192,11 +227,6 @@ function saveOrderUpdate(
 ) {
   if (typeof window === 'undefined') return;
   try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return;
-    const list = JSON.parse(raw);
-    if (!Array.isArray(list)) return;
-
     const now = new Date();
     const dateLabel = now.toLocaleDateString('id-ID', {
       day: 'numeric',
@@ -204,21 +234,44 @@ function saveOrderUpdate(
       year: 'numeric',
     });
 
-    const updated = list.map((item) => {
-      if (item.consultationId === consultationId) {
-        return {
-          ...item,
-          status: newStatus,
-          adminFeedback: feedback !== undefined ? feedback : item.adminFeedback,
-          estimasiHarga: estimasiHarga || item.estimasiHarga || 'Rp 145.000',
-          shopeeUrl: shopeeUrl !== undefined ? shopeeUrl : item.shopeeUrl,
-          reviewedAt: dateLabel,
-        };
+    const targetKeys: string[] = [];
+    if (storageKey && storageKey !== 'backend_api') {
+      targetKeys.push(storageKey);
+    } else {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('dinail_consultations_')) {
+          targetKeys.push(key);
+        }
       }
-      return item;
-    });
+    }
 
-    localStorage.setItem(storageKey, JSON.stringify(updated));
+    targetKeys.forEach((key) => {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const list = JSON.parse(raw);
+      if (!Array.isArray(list)) return;
+
+      let matched = false;
+      const updated = list.map((item) => {
+        if (item.consultationId === consultationId) {
+          matched = true;
+          return {
+            ...item,
+            status: newStatus,
+            adminFeedback: feedback !== undefined ? feedback : item.adminFeedback,
+            estimasiHarga: estimasiHarga || item.estimasiHarga || 'Rp 145.000',
+            shopeeUrl: shopeeUrl !== undefined ? shopeeUrl : item.shopeeUrl,
+            reviewedAt: dateLabel,
+          };
+        }
+        return item;
+      });
+
+      if (matched) {
+        localStorage.setItem(key, JSON.stringify(updated));
+      }
+    });
   } catch (err) {
     console.error('Failed to update consultation:', err);
   }
@@ -815,10 +868,10 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div style={{ background: '#F8F5F2', minHeight: '100vh', overflowX: 'clip', display: 'flex', color: '#141413', fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
+    <div className="overflow-x-hidden" style={{ background: '#F8F5F2', minHeight: '100vh', width: '100%', maxWidth: '100%', overflowX: 'hidden', display: 'flex', color: '#141413', fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
       {/* ── 1. SIDEBAR KIRI (Desktop >= 1024px) ── */}
       <aside
-        className="dashboard-sidebar-desktop"
+        className="hidden lg:flex dashboard-sidebar-desktop"
         style={{
           width: 240,
           minWidth: 240,
@@ -1198,10 +1251,10 @@ export default function AdminDashboardPage() {
       </AnimatePresence>
 
       {/* ── 2. AREA KONTEN UTAMA ── */}
-      <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: '#F8F5F2' }}>
-        {/* Header Bar */}
+      <main style={{ flex: 1, minWidth: 0, width: '100%', display: 'flex', flexDirection: 'column', background: '#F8F5F2' }}>
+        {/* Header Bar (Ringkas & Sticky di Mobile < 1024px, Utuh di Desktop >= 1024px) */}
         <div
-          className="dashboard-header"
+          className="dashboard-header admin-header-bar"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -1213,15 +1266,15 @@ export default function AdminDashboardPage() {
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 auto' }}>
             <button
               type="button"
               className="dashboard-mobile-menu-btn"
               onClick={() => setMobileDrawerOpen(true)}
               aria-label="Buka menu navigasi Admin"
               style={{
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 borderRadius: 10,
                 border: '1px solid #ECE6E0',
                 backgroundColor: '#FAF7F5',
@@ -1239,21 +1292,21 @@ export default function AdminDashboardPage() {
               </svg>
             </button>
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em', margin: 0, color: '#141413' }}>
+              <h1 style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', margin: 0, color: '#141413', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {activeMenu === 'orderan' && 'Kelola Status Orderan'}
-                {activeMenu === 'import' && 'Import Penjualan Offline (Sheet)'}
+                {activeMenu === 'import' && 'Import Penjualan Offline'}
               </h1>
-              <p style={{ fontSize: 12.5, color: '#71717A', margin: '2px 0 0' }}>
+              <p className="admin-header-subtitle" style={{ fontSize: 12.5, color: '#71717A', margin: '2px 0 0' }}>
                 {activeMenu === 'orderan' && 'Tinjau referensi desain kuku customer, kelola status, dan kirimkan feedback'}
                 {activeMenu === 'import' && 'Unggah laporan penjualan offline dari event/bazaar dalam format CSV atau Excel (.xlsx)'}
               </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <button
               type="button"
-              className="btn-secondary"
+              className="btn-secondary admin-refresh-btn px-3 py-1.5 text-[12px] lg:px-[18px] lg:py-2 lg:text-[13px]"
               onClick={refreshData}
               disabled={isRefreshing}
               title="Perbarui Data"
@@ -1262,6 +1315,7 @@ export default function AdminDashboardPage() {
                 fontSize: 13,
                 fontWeight: 500,
                 fontFamily: 'inherit',
+                whiteSpace: 'nowrap',
               }}
             >
               <span
@@ -1368,6 +1422,7 @@ export default function AdminDashboardPage() {
             >
               {/* Header filter */}
               <div
+                className="admin-filter-header flex flex-col sm:flex-row gap-3"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1386,8 +1441,60 @@ export default function AdminDashboardPage() {
                   </p>
                 </div>
 
-                {/* Filter Status Tabs */}
-                <div className="admin-status-tabs scrollbar-hidden" style={{ display: 'flex', background: '#F8F5F2', border: '1px solid #ECE6E0', borderRadius: 10, padding: 3, gap: 2 }}>
+                {/* Dropdown Filter Status (Khusus Mobile & Tablet < 1024px) */}
+                <div
+                  className="block lg:hidden admin-status-dropdown-mobile relative w-full"
+                  style={{ position: 'relative', width: '100%' }}
+                >
+                  <select
+                    aria-label="Filter Status Orderan"
+                    value={orderStatusFilter}
+                    onChange={(e) => setOrderStatusFilter(e.target.value as 'Semua' | AdminOrderStatus)}
+                    className="dashboard-select-mobile w-full appearance-none bg-[#FAF9F7] border border-[#EAE6E1] rounded-xl px-3.5 py-2.5 pr-9 text-[13px] font-medium text-[#141413]"
+                    style={{
+                      width: '100%',
+                      appearance: 'none',
+                      WebkitAppearance: 'none',
+                      backgroundColor: '#FAF9F7',
+                      border: '1px solid #EAE6E1',
+                      borderRadius: 12,
+                      padding: '10px 36px 10px 14px',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: '#141413',
+                      fontFamily: 'inherit',
+                      cursor: 'pointer',
+                      outline: 'none',
+                    }}
+                  >
+                    {(['Semua', 'Antrian', 'Disetujui', 'Ditolak'] as const).map((tab) => (
+                      <option key={`mobile-admin-opt-${tab}`} value={tab}>
+                        {tab} ({orderCounts[tab]})
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    className="pointer-events-none"
+                    style={{
+                      position: 'absolute',
+                      right: 12,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: '#6B6B6B',
+                      pointerEvents: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                    aria-hidden="true"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </span>
+                </div>
+
+                {/* Filter Status Tabs (Khusus Desktop >= 1024px — Utuh) */}
+                <div className="hidden lg:inline-flex admin-status-tabs scrollbar-hidden" style={{ display: 'flex', background: '#F8F5F2', border: '1px solid #ECE6E0', borderRadius: 10, padding: 3, gap: 2 }}>
                   {(['Semua', 'Antrian', 'Disetujui', 'Ditolak'] as const).map((tab) => {
                     const isActive = orderStatusFilter === tab;
                     const count = orderCounts[tab];
@@ -1448,18 +1555,198 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Table Orderan */}
-              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+              {/* Card View Orderan (Khusus Mobile & Tablet < 1024px) */}
+              <div className="block lg:hidden admin-orders-cards-mobile space-y-3">
+                {showOrderSkeleton ? (
+                  [0, 1, 2].map((idx) => (
+                    <div
+                      key={`mobile-order-skel-${idx}`}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #EAE6E1',
+                        borderRadius: 16,
+                        padding: 14,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Skeleton style={{ width: 150, height: 14, borderRadius: 6 }} />
+                        <Skeleton style={{ width: 72, height: 22, borderRadius: 6 }} />
+                      </div>
+                      <Skeleton style={{ width: '52%', height: 15, borderRadius: 6 }} />
+                      <Skeleton style={{ width: '74%', height: 12, borderRadius: 6 }} />
+                      <Skeleton style={{ width: '100%', height: 38, borderRadius: 12, marginTop: 4 }} />
+                    </div>
+                  ))
+                ) : filteredOrders.length === 0 ? (
+                  <div style={{ padding: '40px 14px', textAlign: 'center', border: '1px solid #EAE6E1', borderRadius: 16, backgroundColor: '#FAF9F7' }}>
+                    <div
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: '50%',
+                        backgroundColor: 'rgba(243, 115, 56, 0.1)',
+                        color: '#F37338',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 10px',
+                      }}
+                    >
+                      <IconInboxEmpty size={24} />
+                    </div>
+                    <h4 style={{ fontSize: 14, fontWeight: 700, color: '#141413', margin: '0 0 4px' }}>
+                      {orderStatusFilter === 'Semua'
+                        ? 'Belum Ada Pengajuan Orderan'
+                        : `Tidak Ada Orderan Berstatus ${orderStatusFilter}`}
+                    </h4>
+                    <p style={{ fontSize: 12, color: '#71717A', maxWidth: 300, margin: '0 auto', lineHeight: 1.5 }}>
+                      Pengajuan konsultasi dari customer akan otomatis tampil di sini.
+                    </p>
+                  </div>
+                ) : (
+                  filteredOrders.map((ord) => {
+                    const currentStatusNorm = normalizeOrderStatus(ord.status);
+                    return (
+                      <div
+                        key={`mobile-card-${ord.consultationId}`}
+                        style={{
+                          backgroundColor: '#FFFFFF',
+                          border: '1px solid #EAE6E1',
+                          borderRadius: 16,
+                          padding: 14,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 10,
+                          minWidth: 0,
+                        }}
+                      >
+                        {/* Baris Atas Kartu: ID + Copy & Badge Status */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 8,
+                            paddingBottom: 10,
+                            borderBottom: '1px solid #F3F0EE',
+                          }}
+                        >
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                            <span
+                              className="text-[12px] font-mono font-semibold whitespace-nowrap"
+                              style={{
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                                fontWeight: 600,
+                                color: '#141413',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {ord.consultationId}
+                            </span>
+                            <CopyPill text={ord.consultationId} />
+                          </div>
+                          <span
+                            style={{
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.04em',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                              background:
+                                currentStatusNorm === 'Disetujui'
+                                  ? '#F0FDF4'
+                                  : currentStatusNorm === 'Ditolak'
+                                  ? '#FFF1F2'
+                                  : '#FFFBEB',
+                              color:
+                                currentStatusNorm === 'Disetujui'
+                                  ? '#16A34A'
+                                  : currentStatusNorm === 'Ditolak'
+                                  ? '#E11D48'
+                                  : '#D97706',
+                            }}
+                          >
+                            {currentStatusNorm}
+                          </span>
+                        </div>
+
+                        {/* Isi Kartu: Nama Customer, Tanggal, Ukuran & Catatan */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: '#141413', margin: 0 }}>
+                            {ord.customerName || 'Customer'}
+                          </p>
+                          <p className="text-[12px] text-[#71717A]" style={{ fontSize: 12, color: '#71717A', margin: 0 }}>
+                            {ord.submittedAt}
+                          </p>
+                          <p
+                            className="line-clamp-2"
+                            style={{
+                              fontSize: 12,
+                              color: '#57534E',
+                              margin: '4px 0 0',
+                              lineHeight: 1.45,
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <strong style={{ color: '#141413', fontWeight: 600 }}>
+                              {ord.nailSizeSummary || 'Standar M'}
+                            </strong>
+                            {ord.notes ? ` · “${ord.notes}”` : ''}
+                          </p>
+                        </div>
+
+                        {/* Footer Kartu: Tombol Aksi Penuh */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrder(ord)}
+                          className="w-full py-2.5 rounded-xl bg-[#141413] text-white text-[13px] font-medium"
+                          style={{
+                            width: '100%',
+                            padding: '10px 14px',
+                            borderRadius: 12,
+                            backgroundColor: '#141413',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            fontSize: 13,
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                            marginTop: 2,
+                          }}
+                        >
+                          Lihat Referensi &amp; Kelola
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Table Orderan (Khusus Desktop >= 1024px — Utuh) */}
+              <div
+                className="hidden lg:block admin-orders-table-desktop w-full overflow-x-auto rounded-2xl border border-[#EAE6E1]"
+                style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', borderRadius: 16, border: '1px solid #EAE6E1' }}
+              >
                 <table style={{ width: '100%', minWidth: 740, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #ECE6E0', color: '#71717A', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      <th style={{ padding: '12px 14px', fontWeight: 600 }}>ID Konsultasi</th>
-                      <th style={{ padding: '12px 14px', fontWeight: 600 }}>Tanggal Masuk</th>
-                      <th style={{ padding: '12px 14px', fontWeight: 600 }}>Customer</th>
-                      <th style={{ padding: '12px 14px', fontWeight: 600 }}>Ukuran Kuku</th>
-                      <th style={{ padding: '12px 14px', fontWeight: 600 }}>Referensi Desain</th>
-                      <th style={{ padding: '12px 14px', fontWeight: 600 }}>Status</th>
-                      <th style={{ padding: '12px 14px', fontWeight: 600, textAlign: 'right' }}>Aksi</th>
+                      <th style={{ padding: '12px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>ID Konsultasi</th>
+                      <th style={{ padding: '12px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>Tanggal Masuk</th>
+                      <th style={{ padding: '12px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>Customer</th>
+                      <th style={{ padding: '12px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>Ukuran Kuku</th>
+                      <th style={{ padding: '12px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>Referensi Desain</th>
+                      <th style={{ padding: '12px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>Status</th>
+                      <th style={{ padding: '12px 14px', fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap' }}>Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1919,7 +2206,7 @@ export default function AdminDashboardPage() {
                       </p>
                     </div>
 
-                    <div style={{ display: 'flex', gap: 10 }}>
+                    <div className="admin-import-actions" style={{ display: 'flex', gap: 10 }}>
                       <button
                         type="button"
                         className="btn-secondary"
@@ -1948,21 +2235,21 @@ export default function AdminDashboardPage() {
                           fontFamily: 'inherit',
                         }}
                       >
-                        <span>Gabungkan ke Data Penjualan →</span>
+                        <span>Gabungkan ke Data Penjualan</span>
                       </button>
                     </div>
                   </div>
 
                   {/* Preview Table */}
-                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxHeight: 280, border: '1px solid #ECE6E0', borderRadius: 10 }}>
+                  <div className="w-full overflow-x-auto rounded-2xl border border-[#EAE6E1]" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxHeight: 280, border: '1px solid #EAE6E1', borderRadius: 16 }}>
                     <table style={{ width: '100%', minWidth: 560, borderCollapse: 'collapse', textAlign: 'left', fontSize: 12 }}>
                       <thead style={{ position: 'sticky', top: 0, background: '#F8F5F2' }}>
                         <tr style={{ borderBottom: '1px solid #ECE6E0', color: '#71717A' }}>
-                          <th style={{ padding: '8px 12px' }}>No</th>
-                          <th style={{ padding: '8px 12px' }}>Tanggal</th>
-                          <th style={{ padding: '8px 12px' }}>Nama Pelanggan</th>
-                          <th style={{ padding: '8px 12px' }}>Item Desain</th>
-                          <th style={{ padding: '8px 12px', textAlign: 'right' }}>Nominal</th>
+                          <th style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>No</th>
+                          <th style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>Tanggal</th>
+                          <th style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>Nama Pelanggan</th>
+                          <th style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>Item Desain</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>Nominal</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2008,15 +2295,15 @@ export default function AdminDashboardPage() {
                   Belum ada berkas offline yang di-import.
                 </p>
               ) : (
-                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+                <div className="w-full overflow-x-auto rounded-2xl border border-[#EAE6E1]" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', borderRadius: 16, border: '1px solid #EAE6E1' }}>
                   <table style={{ width: '100%', minWidth: 620, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #ECE6E0', color: '#71717A', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        <th style={{ padding: '10px 14px', fontWeight: 600 }}>Nama Berkas</th>
-                        <th style={{ padding: '10px 14px', fontWeight: 600 }}>Waktu Import</th>
-                        <th style={{ padding: '10px 14px', fontWeight: 600 }}>Jumlah Transaksi</th>
-                        <th style={{ padding: '10px 14px', fontWeight: 600 }}>Total Nominal</th>
-                        <th style={{ padding: '10px 14px', fontWeight: 600, textAlign: 'right' }}>Aksi</th>
+                        <th style={{ padding: '10px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>Nama Berkas</th>
+                        <th style={{ padding: '10px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>Waktu Import</th>
+                        <th style={{ padding: '10px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>Jumlah Transaksi</th>
+                        <th style={{ padding: '10px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>Total Nominal</th>
+                        <th style={{ padding: '10px 14px', fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap' }}>Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2139,6 +2426,12 @@ export default function AdminDashboardPage() {
 }
 
 // ── DETAIL & STATUS MODAL COMPONENT ──
+const ADMIN_QUICK_FEEDBACKS = [
+  'Ukuran kuku & foto sudah sesuai.',
+  'Foto kurang jelas / koin tidak terbaca, mohon unggah ulang di menu Ukuran Kuku.',
+  'Ukuran disesuaikan berdasarkan foto.',
+] as const;
+
 function ReferenceDetailModal({
   order,
   onClose,
@@ -2153,6 +2446,7 @@ function ReferenceDetailModal({
   const [estimasiHarga, setEstimasiHarga] = useState(order.estimasiHarga || 'Rp 145.000');
   const [shopeeUrl, setShopeeUrl] = useState(order.shopeeUrl || '');
   const [feedbackError, setFeedbackError] = useState('');
+  const [zoomPhoto, setZoomPhoto] = useState<{ url: string; label: string } | null>(null);
 
   const handleApplyFeedbackTemplate = (text: string) => {
     setFeedback(text);
@@ -2167,6 +2461,19 @@ function ReferenceDetailModal({
     setFeedbackError('');
     onSaveStatus(selectedStatus, feedback.trim() || undefined, estimasiHarga.trim(), shopeeUrl.trim() || undefined);
   };
+
+  const nailPhotoSlots: Array<{ key: string; label: string; url?: string }> = [
+    {
+      key: 'fourFingers',
+      label: '4 Jari (Telunjuk – Kelingking)',
+      url: order.nailPhotos?.fourFingersUrl,
+    },
+    {
+      key: 'thumb',
+      label: 'Ibu Jari (Jempol)',
+      url: order.nailPhotos?.thumbUrl,
+    },
+  ];
 
   return (
     <motion.div
@@ -2185,12 +2492,12 @@ function ReferenceDetailModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 20,
+        padding: 16,
       }}
     >
       <motion.div
         onClick={(e) => e.stopPropagation()}
-        className="dinail-modal-card"
+        className="dinail-modal-card max-w-[94vw] max-h-[90vh] overflow-y-auto"
         initial={{ opacity: 0, scale: 0.96, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 6 }}
@@ -2199,12 +2506,13 @@ function ReferenceDetailModal({
           backgroundColor: '#FFFFFF',
           borderRadius: 20,
           padding: '28px 32px',
-          maxWidth: 'min(720px, 94vw)',
+          maxWidth: 'min(760px, 94vw)',
           width: '100%',
           maxHeight: '90vh',
           overflowY: 'auto',
           boxShadow: '0 24px 48px rgba(0, 0, 0, 0.16)',
           position: 'relative',
+          boxSizing: 'border-box',
         }}
       >
         {/* Header Modal */}
@@ -2398,7 +2706,178 @@ function ReferenceDetailModal({
           </div>
         </div>
 
-        {/* ── BAGIAN UBAH STATUS & FEEDBACK PENOLAKAN ── */}
+        {/* ── VERIFIKASI UKURAN KUKU (HASIL AI) — 2 FOTO BERDAMPINGAN ── */}
+        <div
+          style={{
+            padding: '16px 18px',
+            backgroundColor: '#FAF7F5',
+            border: '1px solid #ECE6E0',
+            borderRadius: 14,
+            marginBottom: 22,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              flexWrap: 'wrap',
+              marginBottom: 8,
+            }}
+          >
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor: '#F37338',
+                  display: 'inline-block',
+                  flexShrink: 0,
+                }}
+                aria-hidden="true"
+              />
+              <h4 style={{ fontSize: 13.5, fontWeight: 700, color: '#141413', margin: 0 }}>
+                Verifikasi Ukuran Kuku (Hasil AI)
+              </h4>
+            </div>
+
+            {typeof order.aiConfidenceScore === 'number' && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  backgroundColor: '#FFF5F0',
+                  border: '1px solid rgba(243, 115, 56, 0.3)',
+                  color: '#CF4500',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Akurasi AI {order.aiConfidenceScore}%
+              </span>
+            )}
+          </div>
+
+          <p style={{ fontSize: 12.5, color: '#57534E', margin: '0 0 12px', lineHeight: 1.45 }}>
+            Ringkasan ukuran aktif:{' '}
+            <strong style={{ color: '#141413' }}>{order.nailSizeSummary || 'Standar M'}</strong>
+          </p>
+
+          <div className="admin-nail-photos-grid grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {nailPhotoSlots.map((slot) => (
+              <div
+                key={slot.key}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #ECE6E0',
+                  borderRadius: 12,
+                  padding: 10,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  minWidth: 0,
+                }}
+              >
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: '#141413', lineHeight: 1.3 }}>
+                  {slot.label}
+                </span>
+
+                {slot.url ? (
+                  <button
+                    type="button"
+                    onClick={() => setZoomPhoto({ url: slot.url!, label: slot.label })}
+                    aria-label={`Perbesar foto ${slot.label}`}
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      aspectRatio: '4 / 3',
+                      borderRadius: 10,
+                      overflow: 'hidden',
+                      border: '1px solid #ECE6E0',
+                      padding: 0,
+                      backgroundColor: '#F3F0EE',
+                      cursor: 'zoom-in',
+                      display: 'block',
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={slot.url}
+                      alt={slot.label}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                    />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        bottom: 6,
+                        right: 6,
+                        backgroundColor: 'rgba(20, 20, 19, 0.78)',
+                        backdropFilter: 'blur(4px)',
+                        color: '#FFFFFF',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: '3px 8px',
+                        borderRadius: 999,
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      Perbesar
+                    </span>
+                  </button>
+                ) : (
+                  <div
+                    style={{
+                      width: '100%',
+                      aspectRatio: '4 / 3',
+                      borderRadius: 10,
+                      border: '1px dashed #DDD6CE',
+                      backgroundColor: '#FAF7F5',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      padding: 10,
+                      textAlign: 'center',
+                      color: '#71717A',
+                    }}
+                  >
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                    <span style={{ fontSize: 11, lineHeight: 1.35 }}>
+                      Belum ada foto ukuran kuku
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── BAGIAN UBAH STATUS & FEEDBACK ADMIN ── */}
         <div style={{ paddingTop: 18, borderTop: '1px solid #ECE6E0' }}>
           <h4 style={{ fontSize: 13, fontWeight: 700, color: '#141413', marginBottom: 12 }}>
             Pilih Status Orderan
@@ -2453,11 +2932,11 @@ function ReferenceDetailModal({
             })}
           </div>
 
-          {/* Area Khusus Jika Ditolak: Input Feedback Wajib */}
+          {/* Area Feedback Admin (Tampil saat Disetujui maupun Ditolak, dengan Quick-Fill di atas Textarea) */}
           <AnimatePresence initial={false}>
-            {selectedStatus === 'Ditolak' && (
+            {(selectedStatus === 'Disetujui' || selectedStatus === 'Ditolak') && (
               <motion.div
-                key="reject-feedback-section"
+                key="admin-feedback-section"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -2468,15 +2947,53 @@ function ReferenceDetailModal({
                 <div
                   style={{
                     padding: '16px 18px',
-                    backgroundColor: '#FFF1F2',
-                    border: '1.5px solid #FECDD3',
+                    backgroundColor: selectedStatus === 'Ditolak' ? '#FFF1F2' : '#FAF7F5',
+                    border: selectedStatus === 'Ditolak' ? '1.5px solid #FECDD3' : '1px solid #ECE6E0',
                     borderRadius: 12,
-                    marginBottom: 20,
+                    marginBottom: 16,
                   }}
                 >
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#E11D48', display: 'block', marginBottom: 6 }}>
-                    Feedback / Alasan Penolakan ke Customer * (Wajib Diisi)
+                  <label
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: selectedStatus === 'Ditolak' ? '#E11D48' : '#141413',
+                      display: 'block',
+                      marginBottom: 8,
+                    }}
+                  >
+                    {selectedStatus === 'Ditolak'
+                      ? 'Feedback / Alasan Penolakan ke Customer * (Wajib Diisi)'
+                      : 'Feedback Verifikasi ke Customer (Opsional)'}
                   </label>
+
+                  {/* Tombol Quick-Fill di atas textarea */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {ADMIN_QUICK_FEEDBACKS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => handleApplyFeedbackTemplate(preset)}
+                        style={{
+                          backgroundColor: feedback === preset ? '#141413' : '#FFFFFF',
+                          border: feedback === preset ? '1px solid #141413' : '1px solid #E5DDD5',
+                          borderRadius: 9999,
+                          padding: '5px 11px',
+                          fontSize: 11.5,
+                          fontWeight: 500,
+                          color: feedback === preset ? '#FFFFFF' : '#141413',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          fontFamily: 'inherit',
+                          lineHeight: 1.35,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+
                   <textarea
                     rows={3}
                     value={feedback}
@@ -2484,13 +3001,21 @@ function ReferenceDetailModal({
                       setFeedback(e.target.value);
                       if (e.target.value.trim()) setFeedbackError('');
                     }}
-                    placeholder="Tuliskan alasan penolakan atau instruksi perbaikan (contoh: Foto kuku kurang jelas, mohon ambil foto ulang dengan koin pembanding...)"
+                    placeholder={
+                      selectedStatus === 'Ditolak'
+                        ? 'Tuliskan alasan penolakan atau instruksi perbaikan (contoh: Foto kurang jelas / koin tidak terbaca...)'
+                        : 'Tuliskan catatan verifikasi ukuran kuku atau instruksi tambahan untuk customer...'
+                    }
                     style={{
                       width: '100%',
                       padding: '10px 12px',
                       fontSize: 13,
                       borderRadius: 8,
-                      border: feedbackError ? '1px solid #DC2626' : '1px solid #FECDD3',
+                      border: feedbackError
+                        ? '1px solid #DC2626'
+                        : selectedStatus === 'Ditolak'
+                        ? '1px solid #FECDD3'
+                        : '1px solid #E5DDD5',
                       backgroundColor: '#FFFFFF',
                       color: '#141413',
                       outline: 'none',
@@ -2503,47 +3028,6 @@ function ReferenceDetailModal({
                       {feedbackError}
                     </p>
                   )}
-
-                  {/* Template Alasan Cepat */}
-                  <div style={{ marginTop: 10 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#71717A', display: 'block', marginBottom: 4 }}>
-                      Pilih cepat alasan umum:
-                    </span>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {[
-                        'Foto kuku kurang jelas, mohon foto ulang tegak lurus dengan koin Rp 500.',
-                        'Detail desain terlalu kompleks untuk bentuk kuku yang dipilih.',
-                        'Charm atau aksesori untuk model desain ini sedang kehabisan stok.',
-                      ].map((preset, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => handleApplyFeedbackTemplate(preset)}
-                          style={{
-                            backgroundColor: '#FFFFFF',
-                            border: '1px solid #E5DDD5',
-                            borderRadius: 9999,
-                            padding: '5px 12px',
-                            fontSize: 11.5,
-                            fontWeight: 500,
-                            color: '#141413',
-                            cursor: 'pointer',
-                            textAlign: 'left',
-                            fontFamily: 'inherit',
-                            transition: 'all 0.15s ease',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = '#FAF7F5';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = '#FFFFFF';
-                          }}
-                        >
-                          + {preset.slice(0, 38)}...
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </motion.div>
             )}
@@ -2576,7 +3060,7 @@ function ReferenceDetailModal({
           )}
 
           {/* Modal Footer Actions */}
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+          <div className="admin-modal-footer flex flex-col-reverse sm:flex-row gap-2.5" style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
             <button
               type="button"
               className="btn-secondary"
@@ -2632,6 +3116,111 @@ function ReferenceDetailModal({
           </div>
         </div>
       </motion.div>
+
+      {/* Lightbox / Zoom Foto Ukuran Kuku */}
+      <AnimatePresence>
+        {zoomPhoto && (
+          <motion.div
+            key="nail-photo-lightbox"
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoomPhoto(null);
+            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 10020,
+              backgroundColor: 'rgba(20, 20, 19, 0.84)',
+              backdropFilter: 'blur(6px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+            }}
+          >
+            <motion.div
+              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0, scale: 0.94 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.94 }}
+              transition={{ duration: 0.18 }}
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 18,
+                padding: 14,
+                maxWidth: 'min(680px, 94vw)',
+                maxHeight: '90vh',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                boxShadow: '0 24px 64px rgba(0, 0, 0, 0.35)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <p style={{ fontSize: 13.5, fontWeight: 700, color: '#141413', margin: 0 }}>
+                    {zoomPhoto.label}
+                  </p>
+                  <p style={{ fontSize: 11.5, color: '#696969', margin: '2px 0 0' }}>
+                    Periksa posisi koin Rp 500 dan kelengkungan kuku pelanggan
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setZoomPhoto(null)}
+                  aria-label="Tutup pratinjau besar"
+                  style={{
+                    background: '#F8F5F2',
+                    border: '1px solid #ECE6E0',
+                    borderRadius: '50%',
+                    width: 32,
+                    height: 32,
+                    cursor: 'pointer',
+                    fontSize: 15,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#141413',
+                    flexShrink: 0,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div
+                style={{
+                  width: '100%',
+                  maxHeight: '72vh',
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  backgroundColor: '#F3F0EE',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={zoomPhoto.url}
+                  alt={zoomPhoto.label}
+                  style={{
+                    width: '100%',
+                    maxHeight: '72vh',
+                    objectFit: 'contain',
+                    display: 'block',
+                  }}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

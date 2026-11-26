@@ -622,7 +622,6 @@ export default function OrderSteps() {
             }}
           >
             <span>Mulai Alur Sekarang</span>
-            <span aria-hidden="true">&rarr;</span>
           </button>
         </div>
 

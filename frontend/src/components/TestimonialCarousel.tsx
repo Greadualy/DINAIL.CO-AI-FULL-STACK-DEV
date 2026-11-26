@@ -182,31 +182,42 @@ export default function TestimonialCarousel() {
     let pointerEvents: React.CSSProperties['pointerEvents'] = 'none';
     let visibility: React.CSSProperties['visibility'] = 'visible';
 
-    if (offset === 0) {
+    if (isMobile) {
+      if (offset === 0) {
+        transform = 'translate3d(-50%, -50%, 0) scale(1)';
+        zIndex = 30;
+        opacity = 1;
+        pointerEvents = 'auto';
+        visibility = 'visible';
+      } else {
+        transform = `translate3d(calc(-50% + ${sign * 48}px), -50%, 0) scale(0.96)`;
+        zIndex = 1;
+        opacity = 0;
+        pointerEvents = 'none';
+        visibility = 'hidden';
+      }
+    } else if (offset === 0) {
       transform = 'perspective(1100px) translate3d(-50%, -50%, 0) scale(1) rotateY(0deg)';
       zIndex = 30;
       opacity = 1;
       pointerEvents = 'auto';
     } else if (absOffset === 1) {
-      const sideShift = isMobile ? 190 : 260;
-      transform = `perspective(1100px) translate3d(calc(-50% + ${sign * sideShift}px), -50%, 0) scale(${isMobile ? 0.84 : 0.88}) rotateY(${sign * -10}deg)`;
+      transform = `perspective(1100px) translate3d(calc(-50% + ${sign * 260}px), -50%, 0) scale(0.88) rotateY(${sign * -10}deg)`;
       zIndex = 20;
-      opacity = isMobile ? 0.35 : 0.85;
+      opacity = 0.85;
       pointerEvents = 'auto';
-    } else if (absOffset === 2 && !isMobile) {
+    } else if (absOffset === 2) {
       transform = `perspective(1100px) translate3d(calc(-50% + ${sign * 480}px), -50%, 0) scale(0.76) rotateY(${sign * -16}deg)`;
       zIndex = 10;
       opacity = 0.4;
       pointerEvents = 'auto';
-    } else if (isMobile && absOffset >= 2) {
-      opacity = 0;
-      pointerEvents = 'none';
-      visibility = 'hidden';
     }
 
     // Kartu jauh di luar layar (absOffset >= 4) berpindah diam-diam tanpa melintas visual
     const transition =
-      absOffset >= 4
+      isMobile
+        ? 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.35s ease'
+        : absOffset >= 4
         ? 'opacity 0.55s ease'
         : 'transform 0.65s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.55s ease';
 
@@ -329,7 +340,7 @@ export default function TestimonialCarousel() {
           </div>
         </div>
 
-        {/* 3D Ring Carousel Stage (Center-Anchored + Soft Fade Mask) */}
+        {/* 3D Ring Carousel Stage (Center-Anchored; tanpa fade di Mobile) */}
         <div
           style={{
             position: 'relative',
@@ -342,10 +353,14 @@ export default function TestimonialCarousel() {
             alignItems: 'center',
             overflow: 'hidden',
             transformStyle: 'flat',
-            WebkitMaskImage:
-              'linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)',
-            maskImage:
-              'linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)',
+            ...(isMobile
+              ? {}
+              : {
+                  WebkitMaskImage:
+                    'linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)',
+                  maskImage:
+                    'linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)',
+                }),
           }}
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
@@ -361,15 +376,13 @@ export default function TestimonialCarousel() {
                 onClick={() => offset !== 0 && goTo(i)}
               >
                 <div
+                  className="shadow-none"
                   style={{
                     backgroundColor: '#FFFFFF',
                     borderRadius: '28px',
                     padding: '22px 24px',
                     height: '262px',
-                    boxShadow:
-                      offset === 0
-                        ? '0px 20px 44px 0px rgba(0,0,0,0.10)'
-                        : '0px 6px 20px 0px rgba(0,0,0,0.04)',
+                    boxShadow: 'none',
                     border: offset === 0 ? '1.5px solid #F37338' : '1px solid #E8E2DA',
                     display: 'flex',
                     flexDirection: 'column',
