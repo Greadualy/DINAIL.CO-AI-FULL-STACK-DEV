@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'motion/react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import RevealTitle from '@/components/RevealTitle';
+import Skeleton from '@/components/Skeleton';
 import { DINAIL_ASSETS } from '@/constants/assets';
 
 // DATA TIER HARGA RESMI SHOPEE DINAIL.CO
@@ -102,17 +105,111 @@ const TIER_PACKAGES: TierPackage[] = [
   },
 ];
 
-const SHAPE_OPTIONS = [
-  { label: 'Almond', length: 'Short' },
-  { label: 'Almond', length: 'Medium' },
-  { label: 'Oval', length: 'Short' },
-  { label: 'Oval', length: 'Medium' },
-  { label: 'Coffin', length: 'Short' },
-  { label: 'Coffin', length: 'Medium' },
-  { label: 'Stiletto', length: 'Long' },
-  { label: 'Square', length: 'Extra Long' },
-  { label: 'Squoval', length: 'Short' },
+type NailShapeKey = keyof typeof DINAIL_ASSETS.nailShapes;
+
+interface ShapeOptionItem {
+  key: NailShapeKey;
+  label: string;
+  length: string;
+}
+
+const SHAPE_OPTIONS: ShapeOptionItem[] = [
+  { key: 'almondShort', label: 'Almond', length: 'Short' },
+  { key: 'almondMedium', label: 'Almond', length: 'Medium' },
+  { key: 'ovalShort', label: 'Oval', length: 'Short' },
+  { key: 'ovalMedium', label: 'Oval', length: 'Medium' },
+  { key: 'coffinShort', label: 'Coffin', length: 'Short' },
+  { key: 'coffinMedium', label: 'Coffin', length: 'Medium' },
+  { key: 'stilettoLong', label: 'Stiletto', length: 'Long' },
+  { key: 'squareExtraLong', label: 'Square', length: 'Extra Long' },
+  { key: 'squovalShort', label: 'Squoval', length: 'Short' },
 ];
+
+const NAIL_SHAPE_SVG_PATHS: Record<NailShapeKey, { outline: string; lunula: string }> = {
+  // Almond - Short (y: 38 -> 18)
+  almondShort: {
+    outline: 'M 9 35 C 9 27 12.5 21 18 18 C 23.5 21 27 27 27 35 Q 27 38 18 38 Q 9 38 9 35 Z',
+    lunula: 'M 12.5 35.5 Q 18 32.5 23.5 35.5',
+  },
+  // Almond - Medium (y: 38 -> 11)
+  almondMedium: {
+    outline: 'M 9 35 C 9 24 12.5 15.5 18 11 C 23.5 15.5 27 24 27 35 Q 27 38 18 38 Q 9 38 9 35 Z',
+    lunula: 'M 12.5 35.5 Q 18 32.5 23.5 35.5',
+  },
+  // Oval - Short (y: 38 -> 18)
+  ovalShort: {
+    outline: 'M 9 35 L 9 26 C 9 20.5 13 18 18 18 C 23 18 27 20.5 27 26 L 27 35 Q 27 38 18 38 Q 9 38 9 35 Z',
+    lunula: 'M 12.5 35.5 Q 18 32.5 23.5 35.5',
+  },
+  // Oval - Medium (y: 38 -> 11)
+  ovalMedium: {
+    outline: 'M 9 35 L 9 20 C 9 13.8 13 11 18 11 C 23 11 27 13.8 27 20 L 27 35 Q 27 38 18 38 Q 9 38 9 35 Z',
+    lunula: 'M 12.5 35.5 Q 18 32.5 23.5 35.5',
+  },
+  // Coffin - Short (y: 38 -> 18, trapezoid flat tip)
+  coffinShort: {
+    outline: 'M 9 35 L 12.5 18 L 23.5 18 L 27 35 Q 27 38 18 38 Q 9 38 9 35 Z',
+    lunula: 'M 12.5 35.5 Q 18 32.5 23.5 35.5',
+  },
+  // Coffin - Medium (y: 38 -> 11, trapezoid flat tip)
+  coffinMedium: {
+    outline: 'M 9 35 L 13 11 L 23 11 L 27 35 Q 27 38 18 38 Q 9 38 9 35 Z',
+    lunula: 'M 12.5 35.5 Q 18 32.5 23.5 35.5',
+  },
+  // Stiletto - Long (y: 38 -> 6, sharp pointed tip)
+  stilettoLong: {
+    outline: 'M 9 35 C 9.2 25 13 14 18 6 C 23 14 26.8 25 27 35 Q 27 38 18 38 Q 9 38 9 35 Z',
+    lunula: 'M 12.5 35.5 Q 18 32.5 23.5 35.5',
+  },
+  // Square - Extra Long (y: 40 -> 4, straight parallel sides & crisp flat top)
+  squareExtraLong: {
+    outline: 'M 9.5 37 L 9.5 4 L 26.5 4 L 26.5 37 Q 26.5 40 18 40 Q 9.5 40 9.5 37 Z',
+    lunula: 'M 12.5 37.5 Q 18 34.5 23.5 37.5',
+  },
+  // Squoval - Short (y: 38 -> 18, parallel sides & softly rounded top corners)
+  squovalShort: {
+    outline: 'M 9 35 L 9 21.5 Q 9 18 12.5 18 L 23.5 18 Q 27 18 27 21.5 L 27 35 Q 27 38 18 38 Q 9 38 9 35 Z',
+    lunula: 'M 12.5 35.5 Q 18 32.5 23.5 35.5',
+  },
+};
+
+function NailShapeIcon({ shape }: { shape: ShapeOptionItem }) {
+  const webpSrc = DINAIL_ASSETS.nailShapes[shape.key];
+  const [imgFailed, setImgFailed] = useState(false);
+  const paths = NAIL_SHAPE_SVG_PATHS[shape.key];
+
+  if (webpSrc && !imgFailed) {
+    return (
+      <div style={{ position: 'relative', width: '100%', height: '100%', borderRadius: 12, overflow: 'hidden' }}>
+        <Image
+          src={webpSrc}
+          alt={`Bentuk kuku ${shape.label} ${shape.length}`}
+          fill
+          sizes="48px"
+          style={{ objectFit: 'contain' }}
+          onError={() => setImgFailed(true)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <svg
+      width="26"
+      height="32"
+      viewBox="0 0 36 44"
+      fill="none"
+      stroke="#141413"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={paths.outline} />
+      <path d={paths.lunula} opacity="0.35" />
+    </svg>
+  );
+}
 
 // HELPERS
 
@@ -126,27 +223,44 @@ function formatRupiah(val: number) {
 
 // TIER CARD COMPONENT
 
-function TierCard({ pkg }: { pkg: TierPackage }) {
+function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
   const isHighlight = pkg.highlight;
 
   return (
-    <article
-      style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: 32,
-        border: isHighlight ? '2px solid #F37338' : '1px solid #E8E2DA',
-        boxShadow: isHighlight
-          ? '0px 32px 64px 0px rgba(243,115,56,0.10), 0px 8px 24px rgba(0,0,0,0.06)'
-          : '0px 8px 32px 0px rgba(0,0,0,0.05)',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-        overflow: 'hidden',
-      }}
+    <motion.div
+      className="pricelist-card-motion-wrap"
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.2 }}
+      transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: index * 0.06 }}
+      style={{ display: 'flex', height: '100%', minWidth: 0 }}
     >
+      <motion.article
+        className="pricelist-card"
+        whileHover={{ y: -4, transition: { duration: 0.25, ease: 'easeOut' } }}
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 32,
+          border: isHighlight ? '2px solid #F37338' : '1px solid #E8E2DA',
+          boxShadow: isHighlight
+            ? '0px 32px 64px 0px rgba(243,115,56,0.10), 0px 8px 24px rgba(0,0,0,0.06)'
+            : '0px 8px 32px 0px rgba(0,0,0,0.05)',
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+          overflow: 'hidden',
+          width: '100%',
+        }}
+      >
+      {/* Badge Diskon Compact di Pojok Gambar (Khusus Mobile < 640px) */}
+      {pkg.discount && (
+        <span className="pricelist-mobile-discount-badge">-{pkg.discount}%</span>
+      )}
+
       {/* Badge MOST POPULAR */}
       {isHighlight && pkg.badge && (
         <div
+          className="pricelist-popular-badge"
           style={{
             position: 'absolute',
             top: 20,
@@ -161,12 +275,14 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
             zIndex: 2,
           }}
         >
-          ★ {pkg.badge}
+          <span className="popular-label-desktop">★ {pkg.badge}</span>
+          <span className="popular-label-mobile">POPULAR</span>
         </div>
       )}
 
       {/* Cover Image — 1:1 ratio */}
       <div
+        className="pricelist-card-img"
         style={{
           position: 'relative',
           width: '100%',
@@ -181,7 +297,7 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
           alt={pkg.fullName}
           fill
           style={{ objectFit: 'cover' }}
-          sizes="(max-width: 768px) 90vw, (max-width: 1200px) 50vw, 400px"
+          sizes="(max-width: 640px) 48vw, (max-width: 1200px) 50vw, 400px"
         />
         {/* Overlay gradient bawah untuk legibility */}
         <div
@@ -193,6 +309,7 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
         />
         {/* Tier badge di dalam gambar */}
         <div
+          className="pricelist-tier-badge"
           style={{
             position: 'absolute',
             bottom: 16,
@@ -212,10 +329,11 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
       </div>
 
       {/* Card Body */}
-      <div style={{ padding: '24px 24px 28px', display: 'flex', flexDirection: 'column', flex: 1, gap: 0 }}>
+      <div className="pricelist-card-body" style={{ padding: '24px 24px 28px', display: 'flex', flexDirection: 'column', flex: 1, gap: 0 }}>
 
         {/* Stats Row */}
         <div
+          className="pricelist-stats-row"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -229,7 +347,7 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
             <span>{pkg.rating.toFixed(1)}</span>
           </span>
           {pkg.reviewCount && (
-            <span style={{ fontSize: 12, color: '#696969' }}>
+            <span className="pricelist-review-count" style={{ fontSize: 12, color: '#696969' }}>
               ({pkg.reviewCount.toLocaleString('id-ID')} Penilaian)
             </span>
           )}
@@ -252,6 +370,7 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
 
         {/* Product Name */}
         <h3
+          className="pricelist-card-title"
           style={{
             fontSize: 15,
             fontWeight: 600,
@@ -265,7 +384,7 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
         </h3>
 
         {/* Tags */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 18 }}>
+        <div className="pricelist-tags-row" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 18 }}>
           {pkg.tags.map((tag) => (
             <span
               key={tag}
@@ -287,6 +406,7 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
 
         {/* Price Block — Flat Typography (No Box / No Border) */}
         <div
+          className="pricelist-price-block"
           style={{
             margin: '6px 0 22px 0',
             display: 'flex',
@@ -296,6 +416,7 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span
+              className="pricelist-price-main"
               style={{
                 fontSize: 'clamp(21px, 2.2vw, 25px)',
                 fontWeight: 700,
@@ -308,6 +429,7 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
             </span>
             {pkg.discount && (
               <span
+                className="pricelist-inline-discount"
                 style={{
                   fontSize: 11.5,
                   fontWeight: 700,
@@ -328,8 +450,8 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
 
           {/* Harga normal dicoret tanpa pembatas atau sekat box */}
           {pkg.priceToNormal && pkg.priceToNormal !== pkg.priceTo && (
-            <p style={{ fontSize: 12.5, color: '#969696', fontWeight: 400, margin: 0, lineHeight: 1.4 }}>
-              Harga normal:{' '}
+            <p className="pricelist-price-normal" style={{ fontSize: 12.5, color: '#969696', fontWeight: 400, margin: 0, lineHeight: 1.4 }}>
+              <span className="pricelist-price-normal-prefix">Harga normal:{' '}</span>
               <span style={{ textDecoration: 'line-through', color: '#A09B95' }}>
                 {formatRupiah(pkg.priceFromNormal ?? pkg.priceFrom)} – {formatRupiah(pkg.priceToNormal)}
               </span>
@@ -339,6 +461,7 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
 
         {/* Shipping Info */}
         <div
+          className="pricelist-shipping-row"
           style={{
             display: 'flex',
             alignItems: 'flex-start',
@@ -356,10 +479,10 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
         </div>
 
         {/* CTA Buttons — push to bottom */}
-        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="pricelist-cta-group" style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Link
             href="/profil#konsultasi"
-            className="btn-primary"
+            className="btn-primary pricelist-cta-btn"
             style={{
               width: '100%',
               padding: '13px 20px',
@@ -368,14 +491,14 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
               letterSpacing: '-0.01em',
             }}
           >
-            <span>Konsultasi Paket Ini</span>
-            <span aria-hidden="true">→</span>
+            <span className="cta-label-desktop">Konsultasi Paket Ini →</span>
+            <span className="cta-label-mobile">Konsultasi →</span>
           </Link>
           <a
             href={pkg.shopeeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn-secondary"
+            className="btn-secondary pricelist-cta-btn"
             style={{
               width: '100%',
               padding: '12px 20px',
@@ -384,11 +507,13 @@ function TierCard({ pkg }: { pkg: TierPackage }) {
               letterSpacing: '-0.01em',
             }}
           >
-            <span>Lihat di Shopee ↗</span>
+            <span className="cta-label-desktop">Lihat di Shopee ↗</span>
+            <span className="cta-label-mobile">Shopee ↗</span>
           </a>
         </div>
       </div>
-    </article>
+      </motion.article>
+    </motion.div>
   );
 }
 
@@ -406,6 +531,7 @@ function ShapeGuideSection() {
 
   return (
     <section
+      className="shape-guide-section"
       style={{
         backgroundColor: '#FCFBFA',
         paddingTop: 80,
@@ -444,7 +570,9 @@ function ShapeGuideSection() {
             />
             PANDUAN BENTUK &amp; PANJANG KUKU
           </p>
-          <h2
+          <RevealTitle
+            as="h2"
+            text="9 Pilihan Shape & Length"
             style={{
               fontSize: 'clamp(26px, 4vw, 36px)',
               fontWeight: 500,
@@ -453,9 +581,7 @@ function ShapeGuideSection() {
               lineHeight: 1.05,
               marginBottom: 14,
             }}
-          >
-            9 Pilihan Shape &amp; Length
-          </h2>
+          />
           <p
             style={{
               fontSize: 15,
@@ -471,6 +597,7 @@ function ShapeGuideSection() {
 
         {/* Shape Grid */}
         <div
+          className="shape-guide-grid grid-cols-3 gap-2.5"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
@@ -480,30 +607,36 @@ function ShapeGuideSection() {
           {SHAPE_OPTIONS.map((s, i) => {
             const bg = shapeColors[s.label] ?? '#F3F0EE';
             return (
-              <div
+              <motion.div
                 key={i}
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #E8E2DA',
-                  borderRadius: 24,
-                  padding: '22px 20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                  transition: 'box-shadow 0.2s, transform 0.2s',
-                  cursor: 'default',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: i * 0.06 }}
+                style={{ display: 'flex', height: '100%', minWidth: 0 }}
               >
-                {/* Shape icon placeholder */}
+                <motion.div
+                  className="shape-guide-card"
+                  whileHover={{
+                    y: -4,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+                    transition: { duration: 0.25, ease: 'easeOut' },
+                  }}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E8E2DA',
+                    borderRadius: 24,
+                    padding: '22px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    cursor: 'default',
+                    width: '100%',
+                  }}
+                >
+                {/* Hybrid Nail Shape Icon (.webp utama + 9 SVG kustom fallback) */}
                 <div
+                  className="shape-guide-icon"
                   style={{
                     width: 48,
                     height: 48,
@@ -513,15 +646,14 @@ function ShapeGuideSection() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
+                    overflow: 'hidden',
                   }}
                 >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#141413" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M7 3h10a2 2 0 0 1 2 2v10a7 7 0 0 1-14 0V5a2 2 0 0 1 2-2z" />
-                    <line x1="12" y1="3" x2="12" y2="9" />
-                  </svg>
+                  <NailShapeIcon shape={s} />
                 </div>
-                <div>
+                <div className="shape-guide-text" style={{ minWidth: 0 }}>
                   <p
+                    className="shape-guide-label"
                     style={{
                       fontSize: 15,
                       fontWeight: 700,
@@ -533,6 +665,7 @@ function ShapeGuideSection() {
                     {s.label}
                   </p>
                   <span
+                    className="shape-guide-length"
                     style={{
                       display: 'inline-block',
                       fontSize: 11,
@@ -548,13 +681,15 @@ function ShapeGuideSection() {
                     {s.length}
                   </span>
                 </div>
-              </div>
+                </motion.div>
+              </motion.div>
             );
           })}
         </div>
 
         {/* Bottom Note */}
         <div
+          className="custom-outline-banner"
           style={{
             marginTop: 40,
             backgroundColor: 'transparent',
@@ -633,6 +768,30 @@ function ShapeGuideSection() {
 
 export default function PriceListPage() {
   const [activeFilter, setActiveFilter] = useState<string>('Semua');
+  const [isTierDropdownOpen, setIsTierDropdownOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const tierDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      if (tierDropdownRef.current && !tierDropdownRef.current.contains(e.target as Node)) {
+        setIsTierDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, []);
 
   const filters = ['Semua', 'Basic', 'Classic', 'Luxury', 'Prestige'];
 
@@ -642,11 +801,12 @@ export default function PriceListPage() {
   });
 
   return (
-    <main style={{ backgroundColor: '#F3F0EE', minHeight: '100vh' }}>
+    <main style={{ backgroundColor: '#F3F0EE', minHeight: '100vh', overflowX: 'clip' }}>
       <Navbar />
 
       {/* HEADER SECTION */}
       <section
+        className="pricelist-header-section"
         style={{
           paddingTop: 148,
           paddingBottom: 56,
@@ -655,6 +815,7 @@ export default function PriceListPage() {
         }}
       >
         <div style={{ maxWidth: 1120, margin: '0 auto', textAlign: 'center' }}>
+          <div className="pricelist-header-intro">
           {/* Eyebrow */}
           <p
             style={{
@@ -685,7 +846,9 @@ export default function PriceListPage() {
           </p>
 
           {/* Headline */}
-          <h1
+          <RevealTitle
+            as="h1"
+            text="Transparansi Harga untuk Setiap Detail Seni Kuku."
             style={{
               fontSize: 'clamp(30px, 5vw, 54px)',
               fontWeight: 500,
@@ -695,9 +858,7 @@ export default function PriceListPage() {
               maxWidth: 780,
               margin: '0 auto 18px',
             }}
-          >
-            Transparansi Harga untuk Setiap Detail Seni Kuku.
-          </h1>
+          />
 
           {/* Subheadline */}
           <p
@@ -715,6 +876,7 @@ export default function PriceListPage() {
 
           {/* Rating Summary Badge */}
           <div
+            className="pricelist-rating-badge"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -733,13 +895,137 @@ export default function PriceListPage() {
             <span style={{ width: 1, height: 18, backgroundColor: '#E8E2DA' }} />
             <span style={{ fontSize: 13, color: '#141413', fontWeight: 600 }}>2.326 Favorit</span>
           </div>
+          </div>
 
-          {/* Filter Pill Bar */}
+          {/* Mobile Tier Dropdown (< 640px) */}
+          <div ref={tierDropdownRef} className="block sm:hidden mobile-tier-dropdown-wrap">
+            <button
+              type="button"
+              onClick={() => setIsTierDropdownOpen((prev) => !prev)}
+              aria-expanded={isTierDropdownOpen}
+              aria-haspopup="listbox"
+              style={{
+                width: '100%',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E5E0DA',
+                borderRadius: 999,
+                padding: '12px 18px',
+                fontSize: 14,
+                fontWeight: 500,
+                color: '#141413',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                boxShadow: '0px 2px 10px rgba(20, 20, 19, 0.04)',
+              }}
+            >
+              <span>
+                <span style={{ color: '#6B6B6B', fontWeight: 400 }}>Kategori Tier: </span>
+                <strong style={{ color: '#141413', fontWeight: 600 }}>{activeFilter}</strong>
+              </span>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#141413"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  flexShrink: 0,
+                  transform: isTierDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s ease',
+                }}
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+
+            <AnimatePresence>
+              {isTierDropdownOpen && (
+                <motion.div
+                  role="listbox"
+                  aria-label="Pilih Kategori Tier"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    left: 0,
+                    right: 0,
+                    zIndex: 50,
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E5E0DA',
+                    borderRadius: 18,
+                    padding: 6,
+                    boxShadow: '0px 14px 32px rgba(20, 20, 19, 0.12)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                  }}
+                >
+                  {filters.map((f) => {
+                    const isActive = activeFilter === f;
+                    return (
+                      <button
+                        key={`mobile-tier-${f}`}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        onClick={() => {
+                          setActiveFilter(f);
+                          setIsTierDropdownOpen(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 14px',
+                          borderRadius: 12,
+                          border: 'none',
+                          backgroundColor: isActive ? '#FAF7F5' : 'transparent',
+                          color: isActive ? '#F37338' : '#141413',
+                          fontSize: 14,
+                          fontWeight: isActive ? 600 : 500,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        <span>{f}</span>
+                        {isActive && (
+                          <span
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: '50%',
+                              backgroundColor: '#F37338',
+                            }}
+                            aria-hidden="true"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Filter Pill Bar (>= 640px) */}
           <div
+            className="hidden sm:flex catalog-filter-tabs scrollbar-hidden"
             style={{
               display: 'flex',
               gap: 8,
-              justifyContent: 'center',
               flexWrap: 'wrap',
             }}
           >
@@ -773,6 +1059,7 @@ export default function PriceListPage() {
 
       {/* TIER CARDS GRID */}
       <section
+        className="pricelist-grid-section"
         style={{
           paddingBottom: 72,
           paddingLeft: 24,
@@ -780,18 +1067,88 @@ export default function PriceListPage() {
         }}
       >
         <div style={{ maxWidth: 1120, margin: '0 auto' }}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-              gap: 28,
-              alignItems: 'stretch',
-            }}
-          >
-            {filteredPackages.map((pkg) => (
-              <TierCard key={pkg.id} pkg={pkg} />
-            ))}
-          </div>
+          <AnimatePresence mode="wait">
+            {isLoading ? (
+              <motion.div
+                key="pricelist-skeleton-grid"
+                className="pricelist-cards-grid"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                  gap: 28,
+                  alignItems: 'stretch',
+                }}
+              >
+                {Array.from({ length: 4 }).map((_, idx) => (
+                  <div
+                    key={`tier-skel-${idx}`}
+                    className="pricelist-skel-card"
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: 32,
+                      border: '1px solid #E8E2DA',
+                      boxShadow: '0px 8px 32px 0px rgba(0,0,0,0.05)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Skeleton
+                      className="pricelist-skel-img"
+                      style={{
+                        width: '100%',
+                        aspectRatio: '1 / 1',
+                        borderRadius: '28px 28px 0 0',
+                      }}
+                    />
+                    <div className="pricelist-skel-body" style={{ padding: '24px 24px 28px', display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <Skeleton style={{ width: 52, height: 12, borderRadius: 6 }} />
+                        <Skeleton style={{ width: 72, height: 12, borderRadius: 6 }} />
+                      </div>
+                      <Skeleton style={{ width: '88%', height: 16, borderRadius: 8 }} />
+                      <div className="pricelist-skel-tags" style={{ display: 'flex', gap: 6 }}>
+                        <Skeleton style={{ width: 72, height: 22, borderRadius: 999 }} />
+                        <Skeleton style={{ width: 82, height: 22, borderRadius: 999 }} />
+                        <Skeleton style={{ width: 68, height: 22, borderRadius: 999 }} />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                        <Skeleton style={{ width: '74%', height: 22, borderRadius: 8 }} />
+                      </div>
+                      <Skeleton style={{ width: '60%', height: 12, borderRadius: 6 }} />
+                      <div className="pricelist-cta-group" style={{ marginTop: 'auto', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <Skeleton style={{ width: '100%', height: 36, borderRadius: 999 }} />
+                        <Skeleton style={{ width: '100%', height: 34, borderRadius: 999 }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`pricelist-grid-${activeFilter}`}
+                className="pricelist-cards-grid"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                  gap: 28,
+                  alignItems: 'stretch',
+                }}
+              >
+                {filteredPackages.map((pkg, index) => (
+                  <TierCard key={pkg.id} pkg={pkg} index={index} />
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Empty state */}
           {filteredPackages.length === 0 && (

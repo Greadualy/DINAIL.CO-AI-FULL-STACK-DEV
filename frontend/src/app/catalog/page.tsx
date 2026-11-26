@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'motion/react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import RevealTitle from '@/components/RevealTitle';
+import Skeleton from '@/components/Skeleton';
 import { DINAIL_ASSETS } from '@/constants/assets';
 
 // TYPES & DATA KATALOG RESMI DINAIL.CO
@@ -232,10 +235,49 @@ export default function CatalogPage() {
   const [activeCategory, setActiveCategory] = useState<MainCategory>('Semua');
   const [activeSubType, setActiveSubType] = useState<string>('Semua');
   const [previewItem, setPreviewItem] = useState<CatalogDesignItem | null>(null);
+  const [isTierDropdownOpen, setIsTierDropdownOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tierDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      if (tierDropdownRef.current && !tierDropdownRef.current.contains(e.target as Node)) {
+        setIsTierDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, []);
+
+  const triggerLoading = () => {
+    if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+    setIsLoading(true);
+    loadingTimerRef.current = setTimeout(() => {
+      setIsLoading(false);
+      loadingTimerRef.current = null;
+    }, 360);
+  };
 
   const handleCategoryChange = (cat: MainCategory) => {
+    if (cat === activeCategory) return;
     setActiveCategory(cat);
     setActiveSubType('Semua');
+    triggerLoading();
   };
 
   const currentSubFilters =
@@ -251,11 +293,12 @@ export default function CatalogPage() {
     `/profil?design=${encodeURIComponent(item.name)}&category=${encodeURIComponent(item.category)}&type=${encodeURIComponent(item.subType)}#konsultasi`;
 
   return (
-    <main style={{ backgroundColor: '#F3F0EE', minHeight: '100vh' }}>
+    <main style={{ backgroundColor: '#F3F0EE', minHeight: '100vh', overflowX: 'clip' }}>
       <Navbar />
 
       {/* 1. HEADER SECTION */}
       <section
+        className="catalog-header-section"
         style={{
           paddingTop: 148,
           paddingBottom: 40,
@@ -264,6 +307,7 @@ export default function CatalogPage() {
         }}
       >
         <div style={{ maxWidth: 1200, margin: '0 auto', textAlign: 'center' }}>
+          <div className="catalog-header-intro">
           {/* Eyebrow Label */}
           <p
             style={{
@@ -294,7 +338,9 @@ export default function CatalogPage() {
           </p>
 
           {/* Headline (H1) */}
-          <h1
+          <RevealTitle
+            as="h1"
+            text="Eksplorasi Desain Kuku Sesuai Karaktermu."
             style={{
               fontSize: 'clamp(32px, 5vw, 56px)',
               fontWeight: 500,
@@ -304,9 +350,7 @@ export default function CatalogPage() {
               maxWidth: 780,
               margin: '0 auto 18px',
             }}
-          >
-            Eksplorasi Desain Kuku Sesuai Karaktermu.
-          </h1>
+          />
 
           {/* Subtitle */}
           <p
@@ -321,15 +365,139 @@ export default function CatalogPage() {
           >
             Pilih inspirasi desain favorit dari 4 kategori tier kustom dinail.co, atau ajukan referensi desain kustom impianmu saat sesi konsultasi.
           </p>
+          </div>
 
-          {/* 2. MAIN CATEGORY FILTER TABS (FULL-PILL) */}
+          {/* 2A. MOBILE TIER DROPDOWN (< 640px) */}
+          <div ref={tierDropdownRef} className="block sm:hidden mobile-tier-dropdown-wrap">
+            <button
+              type="button"
+              onClick={() => setIsTierDropdownOpen((prev) => !prev)}
+              aria-expanded={isTierDropdownOpen}
+              aria-haspopup="listbox"
+              style={{
+                width: '100%',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E5E0DA',
+                borderRadius: 999,
+                padding: '12px 18px',
+                fontSize: 14,
+                fontWeight: 500,
+                color: '#141413',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                boxShadow: '0px 2px 10px rgba(20, 20, 19, 0.04)',
+              }}
+            >
+              <span>
+                <span style={{ color: '#6B6B6B', fontWeight: 400 }}>Kategori Tier: </span>
+                <strong style={{ color: '#141413', fontWeight: 600 }}>{activeCategory}</strong>
+              </span>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#141413"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  flexShrink: 0,
+                  transform: isTierDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s ease',
+                }}
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+
+            <AnimatePresence>
+              {isTierDropdownOpen && (
+                <motion.div
+                  role="listbox"
+                  aria-label="Pilih Kategori Tier"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    left: 0,
+                    right: 0,
+                    zIndex: 50,
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E5E0DA',
+                    borderRadius: 18,
+                    padding: 6,
+                    boxShadow: '0px 14px 32px rgba(20, 20, 19, 0.12)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                  }}
+                >
+                  {MAIN_CATEGORIES.map((cat) => {
+                    const isActive = activeCategory === cat;
+                    return (
+                      <button
+                        key={`mobile-cat-${cat}`}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        onClick={() => {
+                          handleCategoryChange(cat);
+                          setIsTierDropdownOpen(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 14px',
+                          borderRadius: 12,
+                          border: 'none',
+                          backgroundColor: isActive ? '#FAF7F5' : 'transparent',
+                          color: isActive ? '#F37338' : '#141413',
+                          fontSize: 14,
+                          fontWeight: isActive ? 600 : 500,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        <span>{cat}</span>
+                        {isActive && (
+                          <span
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: '50%',
+                              backgroundColor: '#F37338',
+                            }}
+                            aria-hidden="true"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* 2B. MAIN CATEGORY FILTER TABS (FULL-PILL — >= 640px) */}
           <div
             role="tablist"
             aria-label="Filter Kategori Desain"
+            className="hidden sm:flex catalog-filter-tabs scrollbar-hidden"
             style={{
               display: 'flex',
               flexWrap: 'wrap',
-              justifyContent: 'center',
               alignItems: 'center',
               gap: '12px',
             }}
@@ -391,6 +559,7 @@ export default function CatalogPage() {
               </span>
 
               <div
+                className="catalog-subfilter-tabs scrollbar-hidden"
                 style={{
                   display: 'flex',
                   flexWrap: 'wrap',
@@ -430,7 +599,7 @@ export default function CatalogPage() {
       </section>
 
       {/* 4. CATALOG GRID SECTION */}
-      <section style={{ paddingTop: 12, paddingBottom: 112, paddingLeft: 24, paddingRight: 24 }}>
+      <section className="catalog-grid-section" style={{ paddingTop: 12, paddingBottom: 112, paddingLeft: 24, paddingRight: 24 }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           {/* Result Summary Strip */}
           <div
@@ -481,39 +650,104 @@ export default function CatalogPage() {
             </Link>
           </div>
 
-          {/* Responsive Cards Grid */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: '28px',
-              alignItems: 'stretch',
-            }}
-          >
-            {filteredDesigns.map((item) => (
-              <article
-                key={item.id}
+          {/* Responsive Cards Grid with Warm Skeleton Loading */}
+          <AnimatePresence mode="wait">
+            {isLoading ? (
+              <motion.div
+                key="catalog-skeleton-grid"
+                className="catalog-cards-grid"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
                 style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '32px',
-                  padding: '16px',
-                  boxShadow: '0px 12px 32px rgba(20, 20, 19, 0.05)',
-                  border: '1px solid #EBE6DF',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  transition: 'transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.28s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0px 20px 44px rgba(20, 20, 19, 0.09)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0px 12px 32px rgba(20, 20, 19, 0.05)';
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gap: '28px',
+                  alignItems: 'stretch',
                 }}
               >
+                {Array.from({ length: 8 }).map((_, idx) => (
+                  <div
+                    key={`cat-skel-${idx}`}
+                    className="catalog-skel-card"
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '32px',
+                      padding: '16px',
+                      boxShadow: '0px 12px 32px rgba(20, 20, 19, 0.05)',
+                      border: '1px solid #EBE6DF',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <Skeleton
+                      className="rounded-3xl catalog-skel-img"
+                      style={{
+                        width: '100%',
+                        aspectRatio: '1 / 1',
+                        borderRadius: '24px',
+                      }}
+                    />
+                    <div className="catalog-skel-body" style={{ padding: '18px 8px 6px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <Skeleton style={{ width: '78%', height: 18, borderRadius: 8 }} />
+                      <Skeleton style={{ width: '58%', height: 14, borderRadius: 8 }} />
+                      <Skeleton style={{ width: '66%', height: 22, borderRadius: 999, marginBottom: 4 }} />
+                      <Skeleton style={{ width: '100%', height: 38, borderRadius: 999, marginTop: 'auto' }} />
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`catalog-grid-${activeCategory}-${activeSubType}`}
+                className="catalog-cards-grid"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gap: '28px',
+                  alignItems: 'stretch',
+                }}
+              >
+                {filteredDesigns.map((item, index) => (
+              <motion.div
+                key={item.id}
+                className="catalog-card-motion-wrap"
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{
+                  duration: 0.55,
+                  ease: [0.22, 1, 0.36, 1],
+                  delay: Math.min(index, 7) * 0.06,
+                }}
+                style={{ display: 'flex', height: '100%', minWidth: 0 }}
+              >
+                <motion.article
+                  className="catalog-card"
+                  whileHover={{
+                    y: -4,
+                    boxShadow: '0px 20px 44px rgba(20, 20, 19, 0.09)',
+                    transition: { duration: 0.25, ease: 'easeOut' },
+                  }}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: '32px',
+                    padding: '16px',
+                    boxShadow: '0px 12px 32px rgba(20, 20, 19, 0.05)',
+                    border: '1px solid #EBE6DF',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    width: '100%',
+                  }}
+                >
                 {/* Image Area (1:1 Ratio, radius 24px) */}
                 <div
+                  className="catalog-card-img"
                   onClick={() => setPreviewItem(item)}
                   role="button"
                   tabIndex={0}
@@ -540,11 +774,12 @@ export default function CatalogPage() {
                     alt={`${item.name} — ${item.category} ${item.typeBadge}`}
                     fill
                     style={{ objectFit: 'cover', transition: 'transform 0.4s ease' }}
-                    sizes="(max-width: 640px) 92vw, (max-width: 1024px) 46vw, 300px"
+                    sizes="(max-width: 640px) 48vw, (max-width: 1024px) 46vw, 300px"
                   />
 
                   {/* Top-Left Badge: Nama Kategori */}
                   <span
+                    className="catalog-card-badge-left"
                     style={{
                       position: 'absolute',
                       top: 12,
@@ -565,6 +800,7 @@ export default function CatalogPage() {
 
                   {/* Top-Right Badge: Varian Desain */}
                   <span
+                    className="catalog-card-badge-right"
                     style={{
                       position: 'absolute',
                       top: 12,
@@ -589,6 +825,7 @@ export default function CatalogPage() {
 
                 {/* Info di Bawah Gambar */}
                 <div
+                  className="catalog-card-body"
                   style={{
                     padding: '18px 8px 6px',
                     display: 'flex',
@@ -598,6 +835,7 @@ export default function CatalogPage() {
                 >
                   {/* Nama Desain */}
                   <h2
+                    className="catalog-card-title"
                     style={{
                       fontSize: '18px',
                       fontWeight: 600,
@@ -612,6 +850,7 @@ export default function CatalogPage() {
 
                   {/* Estimasi Harga & Bentuk Kuku Rekomendasi */}
                   <div
+                    className="catalog-card-meta"
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
@@ -620,6 +859,7 @@ export default function CatalogPage() {
                     }}
                   >
                     <p
+                      className="catalog-card-price"
                       style={{
                         fontSize: '15px',
                         fontWeight: 700,
@@ -630,6 +870,7 @@ export default function CatalogPage() {
                       {item.priceRange}
                     </p>
                     <div
+                      className="catalog-card-shape"
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -654,14 +895,15 @@ export default function CatalogPage() {
                         }}
                         aria-hidden="true"
                       />
-                      Rekomendasi: <strong style={{ fontWeight: 600 }}>{item.recommendedShape}</strong>
+                      <span className="catalog-card-shape-prefix">Rekomendasi:&nbsp;</span>
+                      <strong style={{ fontWeight: 600 }}>{item.recommendedShape}</strong>
                     </div>
                   </div>
 
                   {/* Full-width Action Button */}
                   <Link
                     href={buildConsultHref(item)}
-                    className="btn-secondary"
+                    className="btn-secondary catalog-card-cta"
                     style={{
                       marginTop: 'auto',
                       width: '100%',
@@ -671,16 +913,20 @@ export default function CatalogPage() {
                       letterSpacing: '-0.01em',
                     }}
                   >
-                    <span>Gunakan Desain Ini untuk Konsultasi</span>
-                    <span aria-hidden="true">&rarr;</span>
+                    <span className="cta-label-desktop">Gunakan Desain Ini untuk Konsultasi →</span>
+                    <span className="cta-label-mobile">Konsultasi →</span>
                   </Link>
                 </div>
-              </article>
+                </motion.article>
+              </motion.div>
             ))}
-          </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Custom Reference Banner — Outline Pill */}
           <div
+            className="custom-outline-banner"
             style={{
               marginTop: 64,
               backgroundColor: 'transparent',
@@ -723,7 +969,9 @@ export default function CatalogPage() {
                 />
                 PUNYA REFERENSI DESAIN SENDIRI?
               </p>
-              <h2
+              <RevealTitle
+                as="h2"
+                text="Bawa Foto Inspirasimu, Kami Wujudkan Presisi di Jarimu."
                 style={{
                   fontSize: 'clamp(22px, 3vw, 32px)',
                   fontWeight: 500,
@@ -732,9 +980,7 @@ export default function CatalogPage() {
                   color: '#141413',
                   marginBottom: 12,
                 }}
-              >
-                Bawa Foto Inspirasimu, Kami Wujudkan Presisi di Jarimu.
-              </h2>
+              />
               <p style={{ fontSize: 15, fontWeight: 400, color: '#141413', lineHeight: 1.55 }}>
                 Unggah gambar dari Pinterest atau sketsa kustommu di halaman konsultasi. Tim nail artist dinail.co akan merekomendasikan tier &amp; shape terbaik untukmu.
               </p>
@@ -778,9 +1024,10 @@ export default function CatalogPage() {
             style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '36px',
-              maxWidth: 520,
+              maxWidth: 'min(520px, 92vw)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
               width: '100%',
-              overflow: 'hidden',
               boxShadow: '0px 28px 64px rgba(0, 0, 0, 0.24)',
               position: 'relative',
             }}

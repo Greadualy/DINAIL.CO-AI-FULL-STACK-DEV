@@ -4,11 +4,13 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
+import { motion, AnimatePresence } from 'motion/react';
+import Skeleton from '@/components/Skeleton';
 import { useRole } from '@/context/RoleContext';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
-export type AdminMenu = 'penjualan' | 'orderan' | 'import';
+export type AdminMenu = 'orderan' | 'import';
 
 export type AdminOrderStatus = 'Antrian' | 'Disetujui' | 'Ditolak';
 
@@ -52,15 +54,6 @@ export interface OfflineBatch {
   totalNominal: number;
 }
 
-export interface UnifiedTransaction {
-  id: string;
-  tanggal: string;
-  nama: string;
-  item: string;
-  channel: 'Online' | 'Offline';
-  nominal: number;
-  status?: string;
-}
 
 const LS_KEY_OFFLINE_SALES = 'dinail_offline_sales';
 const LS_KEY_OFFLINE_BATCHES = 'dinail_offline_batches';
@@ -95,7 +88,32 @@ function normalizeOrderStatus(status: string): AdminOrderStatus {
   return 'Antrian';
 }
 
-function mapBackendConsultation(c: any): AdminOrder {
+interface BackendConsultationAdmin {
+  consultationCode?: string;
+  id?: string;
+  userId?: string;
+  user?: {
+    id?: string;
+    name?: string;
+    email?: string;
+    savedSizePreset?: string;
+  };
+  confirmedSize?: string;
+  referenceLink?: string;
+  createdAt?: string;
+  status?: string;
+  serviceType?: string;
+  designName?: string;
+  variant?: string;
+  customerNotes?: string;
+  estimatedPrice?: string;
+  photoUrl?: string;
+  shopeeUrl?: string;
+  adminFeedback?: string;
+  reviewedAt?: string;
+}
+
+function mapBackendConsultation(c: BackendConsultationAdmin): AdminOrder {
   const createdAtDate = c.createdAt ? new Date(c.createdAt) : new Date();
   const dateLabel = createdAtDate.toLocaleDateString('id-ID', {
     day: 'numeric',
@@ -115,7 +133,7 @@ function mapBackendConsultation(c: any): AdminOrder {
   }
 
   return {
-    consultationId: c.consultationCode || c.id,
+    consultationId: c.consultationCode || c.id || 'DNL-ORD-UNKNOWN',
     userId: c.userId || c.user?.id,
     customerName: c.user?.name || c.user?.email || 'Customer',
     nailSizeSummary,
@@ -238,15 +256,6 @@ function saveOfflineBatches(batches: OfflineBatch[]) {
   } catch { }
 }
 
-function IconChart({ size = 18 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="20" x2="18" y2="10" />
-      <line x1="12" y1="20" x2="12" y2="4" />
-      <line x1="6" y1="20" x2="6" y2="14" />
-    </svg>
-  );
-}
 
 function IconClipboard({ size = 18 }: { size?: number }) {
   return (
@@ -322,6 +331,28 @@ function IconCheck({ size = 14 }: { size?: number }) {
   );
 }
 
+
+function IconInboxEmpty({ size = 32 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+      <line x1="12" y1="9" x2="12.01" y2="9" />
+    </svg>
+  );
+}
+
+
+function IconInfo({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  );
+}
+
 function CopyPill({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = (e: React.MouseEvent) => {
@@ -356,26 +387,29 @@ function CopyPill({ text }: { text: string }) {
 
 export default function AdminDashboardPage() {
   const { currentUser, currentRole, login } = useRole();
-  const [mounted, setMounted] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [activeMenu, setActiveMenu] = useState<AdminMenu>('penjualan');
+  const [activeMenu, setActiveMenu] = useState<AdminMenu>('orderan');
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [offlineSales, setOfflineSales] = useState<OfflineSaleItem[]>([]);
   const [offlineBatches, setOfflineBatches] = useState<OfflineBatch[]>([]);
 
   // Modals & Forms
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [refreshNotice, setRefreshNotice] = useState<'idle' | 'loading' | 'done'>('idle');
+  const refreshNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Filter States
   const [orderStatusFilter, setOrderStatusFilter] = useState<'Semua' | AdminOrderStatus>('Semua');
-  const [transactionChannelFilter, setTransactionChannelFilter] = useState<'Semua' | 'Online' | 'Offline'>('Semua');
-  const [searchTransaction, setSearchTransaction] = useState('');
 
   // Import State
   const [previewRows, setPreviewRows] = useState<Omit<OfflineSaleItem, 'id' | 'batchId' | 'batchFileName' | 'createdAt'>[] | null>(null);
   const [previewFileName, setPreviewFileName] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (msg: string) => {
@@ -402,117 +436,89 @@ export default function AdminDashboardPage() {
   };
 
   useEffect(() => {
-    setMounted(true);
-    setOrders(loadAllConsultations());
-    setOfflineSales(loadOfflineSales());
-    setOfflineBatches(loadOfflineBatches());
-    fetchConsultationsFromBackend();
-
-    // Check cached role to prevent flashing access denied screen
     const cachedRole = typeof window !== 'undefined' ? localStorage.getItem('dinail_role') : null;
-    if (cachedRole === 'admin' || cachedRole === 'owner') {
-      setIsCheckingAuth(false);
-    } else {
-      const timer = setTimeout(() => setIsCheckingAuth(false), 500);
-      return () => clearTimeout(timer);
-    }
-  }, []);
+    const isRoleAdmin =
+      cachedRole === 'admin' ||
+      cachedRole === 'owner' ||
+      currentRole === 'admin' ||
+      currentRole === 'owner' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'owner';
 
-  useEffect(() => {
-    if (currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner') {
+    const timer = setTimeout(() => {
       setIsCheckingAuth(false);
-    }
+    }, isRoleAdmin ? 0 : 350);
+
+    return () => clearTimeout(timer);
   }, [currentRole, currentUser]);
 
   useEffect(() => {
-    if (activeMenu === 'orderan' || activeMenu === 'penjualan') {
-      fetchConsultationsFromBackend();
-    }
+    let isMounted = true;
+    fetch(`${BACKEND_URL}/api/v1/consultations`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!isMounted || !json.success || !Array.isArray(json.data)) return;
+        const backendOrders = json.data.map(mapBackendConsultation);
+        const localOrders = loadAllConsultations();
+        const existingIds = new Set(backendOrders.map((o: AdminOrder) => o.consultationId));
+        const merged = [...backendOrders, ...localOrders.filter((o) => !existingIds.has(o.consultationId))];
+        setOrders(merged);
+      })
+      .catch(() => {
+        // Fallback to local
+      });
+    return () => {
+      isMounted = false;
+    };
   }, [activeMenu]);
 
-  const refreshData = () => {
-    fetchConsultationsFromBackend();
+  useEffect(() => {
+    const hydrateTimer = setTimeout(() => {
+      setOrders(loadAllConsultations());
+      setOfflineSales(loadOfflineSales());
+      setOfflineBatches(loadOfflineBatches());
+    }, 0);
+    const timer = setTimeout(() => {
+      setIsLoadingOrders(false);
+    }, 400);
+    return () => {
+      clearTimeout(hydrateTimer);
+      clearTimeout(timer);
+      if (refreshNoticeTimerRef.current) clearTimeout(refreshNoticeTimerRef.current);
+    };
+  }, []);
+
+  const showOrderSkeleton = isLoadingOrders || isRefreshing;
+
+  const refreshData = async () => {
+    if (isRefreshing) return;
+    if (refreshNoticeTimerRef.current) {
+      clearTimeout(refreshNoticeTimerRef.current);
+      refreshNoticeTimerRef.current = null;
+    }
+    setIsRefreshing(true);
+    setRefreshNotice('loading');
+    const minDelay = new Promise((resolve) => setTimeout(resolve, 650));
+    setOrders(loadAllConsultations());
     setOfflineSales(loadOfflineSales());
     setOfflineBatches(loadOfflineBatches());
+    try {
+      await Promise.all([fetchConsultationsFromBackend(), minDelay]);
+    } finally {
+      setIsRefreshing(false);
+      setRefreshNotice('done');
+      refreshNoticeTimerRef.current = setTimeout(() => {
+        setRefreshNotice('idle');
+        refreshNoticeTimerRef.current = null;
+      }, 2200);
+    }
   };
 
-  // Computed Metrics
+  // Computed Metrics — only antrianCount needed after removing penjualan tab
   const metrics = useMemo(() => {
-    const approvedOnline = orders.filter((o) => {
-      const s = normalizeOrderStatus(o.status);
-      return s === 'Disetujui';
-    });
-
-    const onlineRev = approvedOnline.reduce((sum, o) => {
-      const nom = parseNominal(o.estimasiHarga);
-      return sum + (nom > 0 ? nom : 145000);
-    }, 0);
-
-    const offlineRev = offlineSales.reduce((sum, s) => sum + s.nominal, 0);
-    const totalRev = onlineRev + offlineRev;
-
     const antrianCount = orders.filter((o) => normalizeOrderStatus(o.status) === 'Antrian').length;
-    const totalTx = approvedOnline.length + offlineSales.length;
-
-    return {
-      totalRev,
-      onlineRev,
-      onlineCount: approvedOnline.length,
-      offlineRev,
-      offlineCount: offlineSales.length,
-      antrianCount,
-      totalTx,
-    };
-  }, [orders, offlineSales]);
-
-  // Unified Transactions
-  const unifiedTransactions: UnifiedTransaction[] = useMemo(() => {
-    const list: UnifiedTransaction[] = [];
-
-    // Online approved orders
-    orders.forEach((o) => {
-      const s = normalizeOrderStatus(o.status);
-      if (s === 'Disetujui') {
-        list.push({
-          id: o.consultationId,
-          tanggal: o.reviewedAt || o.submittedAt.split(',')[0] || '2026-11-22',
-          nama: o.customerName || 'Customer Online',
-          item: o.designName || 'Custom Press-On Nails',
-          channel: 'Online',
-          nominal: parseNominal(o.estimasiHarga) || 145000,
-          status: o.status,
-        });
-      }
-    });
-
-    // Offline sales
-    offlineSales.forEach((s) => {
-      list.push({
-        id: s.id,
-        tanggal: s.tanggal,
-        nama: s.namaPelanggan,
-        item: s.itemDesain,
-        channel: 'Offline',
-        nominal: s.nominal,
-      });
-    });
-
-    // Sort descending by id/date
-    return list.sort((a, b) => b.id.localeCompare(a.id));
-  }, [orders, offlineSales]);
-
-  const filteredTransactions = useMemo(() => {
-    return unifiedTransactions.filter((tx) => {
-      const matchChannel = transactionChannelFilter === 'Semua' || tx.channel === transactionChannelFilter;
-      const q = searchTransaction.toLowerCase().trim();
-      const matchSearch =
-        !q ||
-        tx.id.toLowerCase().includes(q) ||
-        tx.nama.toLowerCase().includes(q) ||
-        tx.item.toLowerCase().includes(q);
-      return matchChannel && matchSearch;
-    });
-  }, [unifiedTransactions, transactionChannelFilter, searchTransaction]);
+    return { antrianCount };
+  }, [orders]);
 
   // Orders filtered
   const filteredOrders = useMemo(() => {
@@ -521,6 +527,25 @@ export default function AdminDashboardPage() {
       return normalizeOrderStatus(o.status) === orderStatusFilter;
     });
   }, [orders, orderStatusFilter]);
+
+  // Order Counts for Status Badges
+  const orderCounts = useMemo(() => {
+    let antrian = 0;
+    let disetujui = 0;
+    let ditolak = 0;
+    orders.forEach((o) => {
+      const s = normalizeOrderStatus(o.status);
+      if (s === 'Antrian') antrian++;
+      else if (s === 'Disetujui') disetujui++;
+      else if (s === 'Ditolak') ditolak++;
+    });
+    return {
+      Semua: orders.length,
+      Antrian: antrian,
+      Disetujui: disetujui,
+      Ditolak: ditolak,
+    };
+  }, [orders]);
 
   // Download CSV Template
   const handleDownloadTemplate = () => {
@@ -601,10 +626,7 @@ export default function AdminDashboardPage() {
   };
 
   // File Upload Handler (CSV / XLSX)
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processUploadedFile = async (file: File) => {
     try {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array' });
@@ -672,6 +694,12 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processUploadedFile(file);
+  };
+
   const handleConfirmImport = () => {
     if (!previewRows || previewRows.length === 0) return;
 
@@ -730,12 +758,12 @@ export default function AdminDashboardPage() {
 
   const isAdmin = currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner';
 
-  if (!mounted || isCheckingAuth) {
+  if (isCheckingAuth) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9F8F6' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F5F2', fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 36, height: 36, border: '3px solid #EAE6E1', borderTopColor: '#B85338', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-          <p style={{ fontSize: 13, color: '#696969', fontWeight: 500 }}>Memuat Admin Panel dinail.co...</p>
+          <div style={{ width: 36, height: 36, border: '3px solid #ECE6E0', borderTopColor: '#F37338', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+          <p style={{ fontSize: 13, color: '#6B6B6B', fontWeight: 500 }}>Memuat Admin Panel dinail.co...</p>
         </div>
       </div>
     );
@@ -743,35 +771,41 @@ export default function AdminDashboardPage() {
 
   if (!isAdmin) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F7F5', padding: 24 }}>
-        <div style={{ maxWidth: 480, width: '100%', background: '#FFFFFF', borderRadius: 16, border: '1px solid #EAE6E1', padding: 32, textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.06)' }}>
-          <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: '#FDF0ED', color: '#B85338', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F5F2', padding: 24, fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
+        <div style={{ maxWidth: 480, width: '100%', background: '#FFFFFF', borderRadius: 16, border: '1px solid #ECE6E0', padding: 32, textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.06)' }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: 'rgba(243, 115, 56, 0.1)', color: '#F37338', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
           </div>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: '#141413', marginBottom: 8 }}>Akses Terbatas: Khusus Administrator</h2>
-          <p style={{ fontSize: 14, color: '#696969', lineHeight: 1.5, marginBottom: 20 }}>
+          <p style={{ fontSize: 14, color: '#6B6B6B', lineHeight: 1.5, marginBottom: 20 }}>
             Akun Anda saat ini terdaftar sebagai <strong>{currentUser?.role || currentRole || 'Customer'}</strong> ({currentUser?.email || 'Belum Login'}). Halaman ini hanya dapat diakses oleh staf admin atau pemilik dinail.co.
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link href="/" style={{ padding: '10px 18px', borderRadius: 10, backgroundColor: '#141413', color: '#FFFFFF', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
               Kembali ke Beranda
             </Link>
-            <Link href="/profil" style={{ padding: '10px 18px', borderRadius: 10, backgroundColor: '#F0ECE6', color: '#141413', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+            <Link href="/profil" style={{ padding: '10px 18px', borderRadius: 10, backgroundColor: '#F3F0EE', color: '#141413', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
               Buka Profil Saya
             </Link>
           </div>
           {process.env.NODE_ENV === 'development' && (
-            <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px dashed #EAE6E1' }}>
-              <span style={{ fontSize: 11, color: '#999', display: 'block', marginBottom: 8 }}>Mode Pengembangan (Development Only):</span>
+            <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px dashed #ECE6E0' }}>
+              <span style={{ fontSize: 11, color: '#71717A', display: 'block', marginBottom: 8 }}>Mode Pengembangan (Development Only):</span>
               <button
                 type="button"
+                className="btn-secondary"
                 onClick={() => login('admin')}
-                style={{ padding: '6px 12px', fontSize: 11, borderRadius: 6, border: '1px solid #B85338', background: '#FFFFFF', color: '#B85338', cursor: 'pointer', fontWeight: 600 }}
+                style={{
+                  padding: '8px 18px',
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  fontFamily: 'inherit',
+                }}
               >
-                Simulasikan Role Admin (Dev)
+                <span>Simulasikan Role Admin (Dev)</span>
               </button>
             </div>
           )}
@@ -781,47 +815,53 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div style={{ background: '#F9F8F6', minHeight: '100vh', display: 'flex', color: '#141413' }}>
-      {/* ── 1. SIDEBAR KIRI ── */}
+    <div style={{ background: '#F8F5F2', minHeight: '100vh', overflowX: 'clip', display: 'flex', color: '#141413', fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
+      {/* ── 1. SIDEBAR KIRI (Desktop >= 1024px) ── */}
       <aside
+        className="dashboard-sidebar-desktop"
         style={{
-          width: 260,
+          width: 240,
+          minWidth: 240,
           background: '#FFFFFF',
-          borderRight: '1px solid #EAE6E1',
+          borderRight: '1px solid #ECE6E0',
           display: 'flex',
           flexDirection: 'column',
           position: 'sticky',
           top: 0,
           height: '100vh',
+          overflow: 'hidden',
           zIndex: 50,
         }}
       >
         {/* Brand / Logo Header */}
-        <div style={{ padding: '28px 24px 20px', borderBottom: '1px solid #EAE6E1' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: '#141413' }}>
-              dinail.co
+        <div style={{ padding: '28px 20px 20px', borderBottom: '1px solid #ECE6E0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.03em', color: '#141413' }}>
+              dinail
             </span>
             <span
               style={{
-                width: 7,
-                height: 7,
+                width: 6,
+                height: 6,
                 borderRadius: '50%',
                 backgroundColor: '#F37338',
                 display: 'inline-block',
+                flexShrink: 0,
               }}
             />
+            <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.03em', color: '#141413' }}>
+              co
+            </span>
           </div>
           <span
             style={{
               fontSize: 10,
-              fontWeight: 700,
+              fontWeight: 600,
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
               color: '#F37338',
-              background: '#FFF7F3',
-              border: '1px solid #FDDCC8',
-              padding: '2px 8px',
+              backgroundColor: 'rgba(243, 115, 56, 0.08)',
+              padding: '3px 8px',
               borderRadius: 4,
               display: 'inline-block',
             }}
@@ -831,64 +871,53 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Menu Navigasi Utama */}
-        <nav style={{ padding: '20px 16px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <nav style={{ padding: '14px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {/* Menu 1 */}
-          <button
-            type="button"
-            onClick={() => setActiveMenu('penjualan')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              width: '100%',
-              padding: '12px 14px',
-              borderRadius: 10,
-              background: activeMenu === 'penjualan' ? '#F3F0EE' : 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: activeMenu === 'penjualan' ? 700 : 500,
-              color: '#141413',
-              textAlign: 'left',
-              fontFamily: 'inherit',
-              transition: 'background-color 0.15s ease',
-            }}
-          >
-            <span style={{ color: activeMenu === 'penjualan' ? '#F37338' : '#767676' }}>
-              <IconChart size={18} />
-            </span>
-            <span style={{ flex: 1 }}>Dashboard Penjualan</span>
-          </button>
-
-          {/* Menu 2 */}
           <button
             type="button"
             onClick={() => setActiveMenu('orderan')}
             style={{
+              position: 'relative',
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
+              gap: 10,
               width: '100%',
-              padding: '12px 14px',
-              borderRadius: 10,
-              background: activeMenu === 'orderan' ? '#F3F0EE' : 'transparent',
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: activeMenu === 'orderan' ? 700 : 500,
-              color: '#141413',
+              fontSize: 13.5,
+              fontWeight: activeMenu === 'orderan' ? 600 : 500,
+              color: activeMenu === 'orderan' ? '#141413' : '#6B6B6B',
               textAlign: 'left',
               fontFamily: 'inherit',
-              transition: 'background-color 0.15s ease',
+              transition: 'color 0.15s ease',
             }}
           >
-            <span style={{ color: activeMenu === 'orderan' ? '#F37338' : '#767676' }}>
-              <IconClipboard size={18} />
+            {activeMenu === 'orderan' && (
+              <motion.div
+                layoutId="admin-sidebar-active"
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: 8,
+                  backgroundColor: '#F8F5F2',
+                  borderLeft: '3px solid #F37338',
+                  zIndex: 0,
+                }}
+              />
+            )}
+            <span style={{ position: 'relative', zIndex: 1, color: activeMenu === 'orderan' ? '#F37338' : '#71717A', flexShrink: 0, display: 'flex' }}>
+              <IconClipboard size={17} />
             </span>
-            <span style={{ flex: 1 }}>Status Orderan</span>
+            <span style={{ position: 'relative', zIndex: 1, flex: 1 }}>Status Orderan</span>
             {metrics.antrianCount > 0 && (
               <span
                 style={{
+                  position: 'relative',
+                  zIndex: 1,
                   fontSize: 11,
                   fontWeight: 700,
                   backgroundColor: '#F37338',
@@ -902,452 +931,438 @@ export default function AdminDashboardPage() {
             )}
           </button>
 
-          {/* Menu 3 */}
+          {/* Menu 2 */}
           <button
             type="button"
             onClick={() => setActiveMenu('import')}
             style={{
+              position: 'relative',
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
+              gap: 10,
               width: '100%',
-              padding: '12px 14px',
-              borderRadius: 10,
-              background: activeMenu === 'import' ? '#F3F0EE' : 'transparent',
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: activeMenu === 'import' ? 700 : 500,
-              color: '#141413',
+              fontSize: 13.5,
+              fontWeight: activeMenu === 'import' ? 600 : 500,
+              color: activeMenu === 'import' ? '#141413' : '#6B6B6B',
               textAlign: 'left',
               fontFamily: 'inherit',
-              transition: 'background-color 0.15s ease',
+              transition: 'color 0.15s ease',
             }}
           >
-            <span style={{ color: activeMenu === 'import' ? '#F37338' : '#767676' }}>
-              <IconUploadCloud size={18} />
+            {activeMenu === 'import' && (
+              <motion.div
+                layoutId="admin-sidebar-active"
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: 8,
+                  backgroundColor: '#F8F5F2',
+                  borderLeft: '3px solid #F37338',
+                  zIndex: 0,
+                }}
+              />
+            )}
+            <span style={{ position: 'relative', zIndex: 1, color: activeMenu === 'import' ? '#F37338' : '#71717A', flexShrink: 0, display: 'flex' }}>
+              <IconUploadCloud size={17} />
             </span>
-            <span style={{ flex: 1 }}>Import Penjualan Offline</span>
+            <span style={{ position: 'relative', zIndex: 1, flex: 1 }}>Import Penjualan Offline</span>
           </button>
         </nav>
 
-        {/* Footer Sidebar: Tombol Keluar / Ke Toko */}
-        <div style={{ padding: '20px 20px 24px', borderTop: '1px solid #EAE6E1' }}>
+        {/* Footer Sidebar: Tombol Kembali ke Beranda */}
+        <div style={{ padding: '14px 12px 56px', borderTop: '1px solid #ECE6E0', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <Link
             href="/"
             style={{
-              display: 'inline-flex',
+              display: 'flex',
               alignItems: 'center',
-              gap: 8,
+              gap: 10,
+              padding: '10px 14px',
+              borderRadius: 8,
               fontSize: 13,
-              fontWeight: 600,
-              color: '#767676',
+              fontWeight: 500,
+              color: '#6B6B6B',
               textDecoration: 'none',
               transition: 'color 0.15s ease',
             }}
           >
-            <IconArrowLeft size={16} />
+            <span style={{ color: '#71717A', flexShrink: 0, display: 'flex' }}>
+              <IconArrowLeft size={16} />
+            </span>
             <span>Kembali ke Beranda</span>
           </Link>
         </div>
       </aside>
 
+      {/* ── MOBILE SLIDE-OVER DRAWER (< 1024px) ── */}
+      <AnimatePresence>
+        {mobileDrawerOpen && (
+          <motion.div
+            key="admin-mobile-drawer-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setMobileDrawerOpen(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9000,
+              backgroundColor: 'rgba(20, 20, 19, 0.45)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              display: 'flex',
+            }}
+          >
+            <motion.aside
+              key="admin-mobile-drawer-panel"
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: 264,
+                maxWidth: '82vw',
+                height: '100%',
+                backgroundColor: '#FFFFFF',
+                borderRight: '1px solid #ECE6E0',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 20px 50px rgba(0, 0, 0, 0.18)',
+              }}
+            >
+              <div
+                style={{
+                  padding: '22px 18px 18px',
+                  borderBottom: '1px solid #ECE6E0',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.03em', color: '#141413' }}>dinail</span>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#F37338', display: 'inline-block', flexShrink: 0 }} />
+                    <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.03em', color: '#141413' }}>co</span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: '#F37338',
+                      backgroundColor: 'rgba(243, 115, 56, 0.08)',
+                      padding: '3px 8px',
+                      borderRadius: 4,
+                      display: 'inline-block',
+                    }}
+                  >
+                    Admin Panel
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  aria-label="Tutup menu navigasi"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    border: '1px solid #ECE6E0',
+                    backgroundColor: '#F8F5F2',
+                    color: '#141413',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+
+              <nav style={{ padding: '14px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMenu('orderan');
+                    setMobileDrawerOpen(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    width: '100%',
+                    padding: '11px 14px',
+                    borderRadius: 8,
+                    background: activeMenu === 'orderan' ? '#F8F5F2' : 'transparent',
+                    border: 'none',
+                    borderLeft: activeMenu === 'orderan' ? '3px solid #F37338' : '3px solid transparent',
+                    cursor: 'pointer',
+                    fontSize: 13.5,
+                    fontWeight: activeMenu === 'orderan' ? 600 : 500,
+                    color: activeMenu === 'orderan' ? '#141413' : '#6B6B6B',
+                    textAlign: 'left',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <span style={{ color: activeMenu === 'orderan' ? '#F37338' : '#71717A', flexShrink: 0, display: 'flex' }}>
+                    <IconClipboard size={17} />
+                  </span>
+                  <span style={{ flex: 1 }}>Status Orderan</span>
+                  {metrics.antrianCount > 0 && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        backgroundColor: '#F37338',
+                        color: '#FFFFFF',
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                      }}
+                    >
+                      {metrics.antrianCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMenu('import');
+                    setMobileDrawerOpen(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    width: '100%',
+                    padding: '11px 14px',
+                    borderRadius: 8,
+                    background: activeMenu === 'import' ? '#F8F5F2' : 'transparent',
+                    border: 'none',
+                    borderLeft: activeMenu === 'import' ? '3px solid #F37338' : '3px solid transparent',
+                    cursor: 'pointer',
+                    fontSize: 13.5,
+                    fontWeight: activeMenu === 'import' ? 600 : 500,
+                    color: activeMenu === 'import' ? '#141413' : '#6B6B6B',
+                    textAlign: 'left',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <span style={{ color: activeMenu === 'import' ? '#F37338' : '#71717A', flexShrink: 0, display: 'flex' }}>
+                    <IconUploadCloud size={17} />
+                  </span>
+                  <span style={{ flex: 1 }}>Import Penjualan Offline</span>
+                </button>
+              </nav>
+
+              <div style={{ padding: '14px 12px 28px', borderTop: '1px solid #ECE6E0' }}>
+                <Link
+                  href="/"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: '#6B6B6B',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <span style={{ color: '#71717A', flexShrink: 0, display: 'flex' }}>
+                    <IconArrowLeft size={16} />
+                  </span>
+                  <span>Kembali ke Beranda</span>
+                </Link>
+              </div>
+            </motion.aside>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── 2. AREA KONTEN UTAMA ── */}
-      <main style={{ flex: 1, minWidth: 0, padding: '36px 40px 60px' }}>
+      <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: '#F8F5F2' }}>
         {/* Header Bar */}
         <div
+          className="dashboard-header"
           style={{
             display: 'flex',
-            alignItems: 'flex-start',
+            alignItems: 'center',
             justifyContent: 'space-between',
-            marginBottom: 28,
+            padding: '20px 32px',
+            background: '#FFFFFF',
+            borderBottom: '1px solid #ECE6E0',
             gap: 16,
             flexWrap: 'wrap',
           }}
         >
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', margin: 0, color: '#141413' }}>
-              {activeMenu === 'penjualan' && 'Dashboard Penjualan'}
-              {activeMenu === 'orderan' && 'Kelola Status Orderan'}
-              {activeMenu === 'import' && 'Import Penjualan Offline (Sheet)'}
-            </h1>
-            <p style={{ fontSize: 13, color: '#696969', margin: '4px 0 0' }}>
-              {activeMenu === 'penjualan' && 'Pantau ringkasan pendapatan terpadu dari channel Online & Offline'}
-              {activeMenu === 'orderan' && 'Tinjau referensi desain kuku customer, kelola status, dan kirimkan feedback'}
-              {activeMenu === 'import' && 'Unggah laporan penjualan offline dari event/bazaar dalam format CSV atau Excel (.xlsx)'}
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 auto' }}>
+            <button
+              type="button"
+              className="dashboard-mobile-menu-btn"
+              onClick={() => setMobileDrawerOpen(true)}
+              aria-label="Buka menu navigasi Admin"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                border: '1px solid #ECE6E0',
+                backgroundColor: '#FAF7F5',
+                color: '#141413',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em', margin: 0, color: '#141413' }}>
+                {activeMenu === 'orderan' && 'Kelola Status Orderan'}
+                {activeMenu === 'import' && 'Import Penjualan Offline (Sheet)'}
+              </h1>
+              <p style={{ fontSize: 12.5, color: '#71717A', margin: '2px 0 0' }}>
+                {activeMenu === 'orderan' && 'Tinjau referensi desain kuku customer, kelola status, dan kirimkan feedback'}
+                {activeMenu === 'import' && 'Unggah laporan penjualan offline dari event/bazaar dalam format CSV atau Excel (.xlsx)'}
+              </p>
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
               type="button"
+              className="btn-secondary"
               onClick={refreshData}
+              disabled={isRefreshing}
               title="Perbarui Data"
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '8px 14px',
-                background: '#FFFFFF',
-                border: '1px solid #EAE6E1',
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#141413',
-                cursor: 'pointer',
+                padding: '8px 18px',
+                fontSize: 13,
+                fontWeight: 500,
                 fontFamily: 'inherit',
               }}
             >
-              <IconRefresh size={13} />
-              <span>Muat Ulang</span>
+              <span
+                className={isRefreshing ? 'animate-spin' : undefined}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  animation: isRefreshing ? 'spin 0.7s linear infinite' : undefined,
+                }}
+              >
+                <IconRefresh size={14} />
+              </span>
+              <span>{isRefreshing ? 'Memperbarui...' : 'Muat Ulang'}</span>
             </button>
           </div>
         </div>
 
-        {/* ── TAB 1: DASHBOARD PENJUALAN ── */}
-        {activeMenu === 'penjualan' && (
-          <div>
-            {/* Flat KPI Strip */}
-            <div
+        {/* Pil Notifikasi Status Muat Ulang (Alur 3 Tahap) */}
+        <AnimatePresence>
+          {refreshNotice !== 'idle' && (
+            <motion.div
+              key="refresh-notice-pill"
+              role="status"
+              aria-live="polite"
+              initial={{ opacity: 0, y: -10, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.96 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #EAE6E1',
-                borderRadius: 14,
-                marginBottom: 28,
-                overflow: 'hidden',
+                position: 'fixed',
+                top: 20,
+                left: '50%',
+                x: '-50%',
+                zIndex: 10002,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '9px 18px',
+                borderRadius: 9999,
+                backgroundColor: '#141413',
+                color: '#FFFFFF',
+                fontSize: 12.5,
+                fontWeight: 500,
+                boxShadow: '0 8px 24px rgba(20, 20, 19, 0.18)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
               }}
             >
-              {/* Metric 1 */}
-              <div style={{ padding: '22px 24px', borderRight: '1px solid #EAE6E1' }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Total Pendapatan
-                </span>
-                <p suppressHydrationWarning style={{ fontSize: 24, fontWeight: 700, color: '#141413', margin: '6px 0 2px', letterSpacing: '-0.02em' }}>
-                  {formatRupiah(metrics.totalRev)}
-                </p>
-                <span style={{ fontSize: 12, color: '#696969' }}>
-                  Gabungan Online &amp; Offline
-                </span>
-              </div>
-
-              {/* Metric 2 */}
-              <div style={{ padding: '22px 24px', borderRight: '1px solid #EAE6E1' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#141413' }} />
-                  <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Penjualan Online
-                  </span>
-                </div>
-                <p suppressHydrationWarning style={{ fontSize: 24, fontWeight: 700, color: '#141413', margin: '6px 0 2px', letterSpacing: '-0.02em' }}>
-                  {formatRupiah(metrics.onlineRev)}
-                </p>
-                <span style={{ fontSize: 12, color: '#696969' }}>
-                  {metrics.onlineCount} pesanan disetujui
-                </span>
-              </div>
-
-              {/* Metric 3 */}
-              <div style={{ padding: '22px 24px', borderRight: '1px solid #EAE6E1' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#F37338' }} />
-                  <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Penjualan Offline
-                  </span>
-                </div>
-                <p suppressHydrationWarning style={{ fontSize: 24, fontWeight: 700, color: '#F37338', margin: '6px 0 2px', letterSpacing: '-0.02em' }}>
-                  {formatRupiah(metrics.offlineRev)}
-                </p>
-                <span style={{ fontSize: 12, color: '#696969' }}>
-                  {metrics.offlineCount} item transaksi sheet
-                </span>
-              </div>
-
-              {/* Metric 4 */}
-              <div style={{ padding: '22px 24px' }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Total Transaksi &amp; Antrian
-                </span>
-                <p style={{ fontSize: 24, fontWeight: 700, color: '#141413', margin: '6px 0 2px', letterSpacing: '-0.02em' }}>
-                  {metrics.totalTx}{' '}
-                  <span style={{ fontSize: 14, fontWeight: 500, color: '#767676' }}>transaksi</span>
-                </p>
-                <span style={{ fontSize: 12, color: metrics.antrianCount > 0 ? '#F37338' : '#16A34A', fontWeight: 600 }}>
-                  {metrics.antrianCount} orderan menunggu review
-                </span>
-              </div>
-            </div>
-
-            {/* Perbandingan & Visualisasi Grafik Penjualan */}
-            <div
-              style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #EAE6E1',
-                borderRadius: 14,
-                padding: '24px 28px',
-                marginBottom: 28,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, color: '#141413', margin: 0 }}>
-                    Perbandingan Kontribusi Penjualan (Online vs Offline)
-                  </h3>
-                  <p style={{ fontSize: 12, color: '#696969', margin: '3px 0 0' }}>
-                    Visualisasi otomatis diperbarui saat data penjualan offline di-import
-                  </p>
-                </div>
-
-                {/* Legend */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 12, height: 12, backgroundColor: '#141413', borderRadius: 2 }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#141413' }}>Online ({metrics.totalRev > 0 ? Math.round((metrics.onlineRev / metrics.totalRev) * 100) : 0}%)</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 12, height: 12, backgroundColor: '#F37338', borderRadius: 2 }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#F37338' }}>Offline ({metrics.totalRev > 0 ? Math.round((metrics.offlineRev / metrics.totalRev) * 100) : 0}%)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Progress Split Bar */}
-              <div
-                style={{
-                  height: 12,
-                  width: '100%',
-                  backgroundColor: '#F3F0EE',
-                  borderRadius: 6,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  marginBottom: 24,
-                }}
-              >
-                <div
-                  style={{
-                    height: '100%',
-                    width: `${metrics.totalRev > 0 ? (metrics.onlineRev / metrics.totalRev) * 100 : 50}%`,
-                    backgroundColor: '#141413',
-                    transition: 'width 0.4s ease',
-                  }}
-                  title={`Online: ${formatRupiah(metrics.onlineRev)}`}
-                />
-                <div
-                  style={{
-                    height: '100%',
-                    width: `${metrics.totalRev > 0 ? (metrics.offlineRev / metrics.totalRev) * 100 : 50}%`,
-                    backgroundColor: '#F37338',
-                    transition: 'width 0.4s ease',
-                  }}
-                  title={`Offline: ${formatRupiah(metrics.offlineRev)}`}
-                />
-              </div>
-
-              {/* Minimalist Bar Chart Representation */}
-              <div style={{ display: 'flex', alignItems: 'flex-end', height: 160, gap: 40, padding: '0 20px', borderBottom: '1px solid #EAE6E1' }}>
-                {/* Bar Online */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#141413', marginBottom: 6 }}>
-                    {formatRupiah(metrics.onlineRev)}
-                  </span>
-                  <div
+              {refreshNotice === 'loading' ? (
+                <>
+                  <span
+                    className="animate-spin"
                     style={{
-                      width: '50%',
-                      maxWidth: 90,
-                      height: `${metrics.totalRev > 0 ? Math.max(14, (metrics.onlineRev / Math.max(metrics.onlineRev, metrics.offlineRev || 1)) * 120) : 10}px`,
-                      backgroundColor: '#141413',
-                      borderRadius: '6px 6px 0 0',
-                      transition: 'height 0.4s ease',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#F37338',
+                      animation: 'spin 0.7s linear infinite',
                     }}
-                  />
-                  <span style={{ fontSize: 12, color: '#696969', marginTop: 10, fontWeight: 600 }}>
-                    Online ({metrics.onlineCount} trx)
+                  >
+                    <IconRefresh size={14} />
                   </span>
-                </div>
-
-                {/* Bar Offline */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#F37338', marginBottom: 6 }}>
-                    {formatRupiah(metrics.offlineRev)}
-                  </span>
-                  <div
+                  <span>Memuat data...</span>
+                </>
+              ) : (
+                <>
+                  <span
                     style={{
-                      width: '50%',
-                      maxWidth: 90,
-                      height: `${metrics.totalRev > 0 ? Math.max(14, (metrics.offlineRev / Math.max(metrics.onlineRev, metrics.offlineRev || 1)) * 120) : 10}px`,
-                      backgroundColor: '#F37338',
-                      borderRadius: '6px 6px 0 0',
-                      transition: 'height 0.4s ease',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#22C55E',
                     }}
-                  />
-                  <span style={{ fontSize: 12, color: '#696969', marginTop: 10, fontWeight: 600 }}>
-                    Offline ({metrics.offlineCount} trx)
+                  >
+                    <IconCheck size={14} />
                   </span>
-                </div>
-              </div>
-            </div>
+                  <span>Data berhasil diperbarui.</span>
+                </>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            {/* Tabel Transaksi Terpadu */}
-            <div
-              style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #EAE6E1',
-                borderRadius: 14,
-                padding: '24px 28px',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: 20,
-                  gap: 16,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#141413', margin: 0 }}>
-                    Riwayat Transaksi Terpadu
-                  </h3>
-                  <p style={{ fontSize: 12, color: '#696969', margin: '3px 0 0' }}>
-                    Menampilkan seluruh orderan online disetujui dan transaksi penjualan offline
-                  </p>
-                </div>
-
-                {/* Filter Tabs & Search */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', background: '#F3F0EE', borderRadius: 8, padding: 3 }}>
-                    {(['Semua', 'Online', 'Offline'] as const).map((tab) => {
-                      const isActive = transactionChannelFilter === tab;
-                      return (
-                        <button
-                          key={tab}
-                          type="button"
-                          onClick={() => setTransactionChannelFilter(tab)}
-                          style={{
-                            border: 'none',
-                            background: isActive ? '#FFFFFF' : 'transparent',
-                            color: isActive ? '#141413' : '#696969',
-                            fontWeight: isActive ? 700 : 500,
-                            padding: '6px 14px',
-                            borderRadius: 6,
-                            fontSize: 12,
-                            cursor: 'pointer',
-                            boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                            transition: 'all 0.15s ease',
-                          }}
-                        >
-                          {tab}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <input
-                    type="text"
-                    placeholder="Cari transaksi / pelanggan..."
-                    value={searchTransaction}
-                    onChange={(e) => setSearchTransaction(e.target.value)}
-                    style={{
-                      padding: '7px 12px',
-                      fontSize: 12,
-                      border: '1px solid #EAE6E1',
-                      borderRadius: 8,
-                      background: '#F9F8F6',
-                      color: '#141413',
-                      outline: 'none',
-                      minWidth: 200,
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Tabel */}
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #EAE6E1', color: '#767676', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      <th style={{ padding: '12px 14px', fontWeight: 600 }}>ID / Kode Transaksi</th>
-                      <th style={{ padding: '12px 14px', fontWeight: 600 }}>Tanggal</th>
-                      <th style={{ padding: '12px 14px', fontWeight: 600 }}>Nama Pelanggan &amp; Item</th>
-                      <th style={{ padding: '12px 14px', fontWeight: 600 }}>Channel</th>
-                      <th style={{ padding: '12px 14px', fontWeight: 600, textAlign: 'right' }}>Nominal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTransactions.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} style={{ padding: '36px 14px', textAlign: 'center', color: '#767676' }}>
-                          Belum ada data transaksi yang sesuai filter.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredTransactions.map((tx) => (
-                        <tr
-                          key={tx.id}
-                          style={{
-                            borderBottom: '1px solid #EAE6E1',
-                            transition: 'background-color 0.15s ease',
-                          }}
-                        >
-                          <td style={{ padding: '14px', fontFamily: 'monospace', fontWeight: 600, color: '#141413' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <span>{tx.id}</span>
-                              <CopyPill text={tx.id} />
-                            </div>
-                          </td>
-                          <td style={{ padding: '14px', color: '#696969', whiteSpace: 'nowrap' }}>
-                            {tx.tanggal}
-                          </td>
-                          <td style={{ padding: '14px' }}>
-                            <p style={{ fontWeight: 600, color: '#141413', margin: 0 }}>
-                              {tx.nama}
-                            </p>
-                            <span style={{ fontSize: 12, color: '#767676' }}>
-                              {tx.item}
-                            </span>
-                          </td>
-                          <td style={{ padding: '14px' }}>
-                            <span
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                padding: '3px 8px',
-                                borderRadius: 4,
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.04em',
-                                background: tx.channel === 'Online' ? '#F3F0EE' : '#FFF7F3',
-                                color: tx.channel === 'Online' ? '#141413' : '#F37338',
-                                border: tx.channel === 'Online' ? '1px solid #EAE6E1' : '1px solid #FDDCC8',
-                              }}
-                            >
-                              {tx.channel}
-                            </span>
-                          </td>
-                          <td style={{ padding: '14px', textAlign: 'right', fontWeight: 700, color: '#141413' }}>
-                            {formatRupiah(tx.nominal)}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB 2: STATUS ORDERAN & MODAL REFERENSI ── */}
+        {/* Page Body */}
+        <div className="dashboard-body" style={{ flex: 1, padding: '28px 32px 60px', overflowY: 'auto' }}>
+        <AnimatePresence mode="wait">
+        {/* ── TAB 1: STATUS ORDERAN & MODAL REFERENSI ── */}
         {activeMenu === 'orderan' && (
-          <div>
+          <motion.div
+            key="admin-tab-orderan"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
             <div
+              className="dashboard-card"
               style={{
                 backgroundColor: '#FFFFFF',
-                border: '1px solid #EAE6E1',
-                borderRadius: 14,
+                border: '1px solid #ECE6E0',
+                borderRadius: 16,
                 padding: '24px 28px',
               }}
             >
@@ -1363,37 +1378,70 @@ export default function AdminDashboardPage() {
                 }}
               >
                 <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#141413', margin: 0 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#141413', margin: 0 }}>
                     Daftar Pengajuan Konsultasi &amp; Orderan Masuk
                   </h3>
-                  <p style={{ fontSize: 12, color: '#696969', margin: '3px 0 0' }}>
+                  <p style={{ fontSize: 12, color: '#71717A', margin: '3px 0 0' }}>
                     Data terhubung langsung dari halaman profil customer. Klik &ldquo;Lihat Referensi&rdquo; untuk meninjau dan mengubah status.
                   </p>
                 </div>
 
                 {/* Filter Status Tabs */}
-                <div style={{ display: 'flex', background: '#F3F0EE', borderRadius: 8, padding: 3 }}>
+                <div className="admin-status-tabs scrollbar-hidden" style={{ display: 'flex', background: '#F8F5F2', border: '1px solid #ECE6E0', borderRadius: 10, padding: 3, gap: 2 }}>
                   {(['Semua', 'Antrian', 'Disetujui', 'Ditolak'] as const).map((tab) => {
                     const isActive = orderStatusFilter === tab;
+                    const count = orderCounts[tab];
                     return (
                       <button
                         key={tab}
                         type="button"
                         onClick={() => setOrderStatusFilter(tab)}
                         style={{
+                          position: 'relative',
                           border: 'none',
-                          background: isActive ? '#FFFFFF' : 'transparent',
-                          color: isActive ? '#141413' : '#696969',
+                          background: 'transparent',
+                          color: isActive ? '#F37338' : '#6B6B6B',
                           fontWeight: isActive ? 700 : 500,
-                          padding: '6px 14px',
-                          borderRadius: 6,
+                          padding: '6px 12px',
+                          borderRadius: 7,
                           fontSize: 12,
                           cursor: 'pointer',
-                          boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                          transition: 'all 0.15s ease',
+                          transition: 'color 0.15s ease',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontFamily: 'inherit',
                         }}
                       >
-                        {tab}
+                        {isActive && (
+                          <motion.div
+                            layoutId="admin-status-tab"
+                            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                            style={{
+                              position: 'absolute',
+                              inset: 0,
+                              borderRadius: 7,
+                              backgroundColor: '#FFFFFF',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                              zIndex: 0,
+                            }}
+                          />
+                        )}
+                        <span style={{ position: 'relative', zIndex: 1 }}>{tab}</span>
+                        <span
+                          style={{
+                            position: 'relative',
+                            zIndex: 1,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: 999,
+                            backgroundColor: isActive ? '#F37338' : '#ECE6E0',
+                            color: isActive ? '#FFFFFF' : '#6B6B6B',
+                          }}
+                        >
+                          {count}
+                        </span>
                       </button>
                     );
                   })}
@@ -1401,10 +1449,10 @@ export default function AdminDashboardPage() {
               </div>
 
               {/* Table Orderan */}
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+                <table style={{ width: '100%', minWidth: 740, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid #EAE6E1', color: '#767676', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <tr style={{ borderBottom: '1px solid #ECE6E0', color: '#71717A', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       <th style={{ padding: '12px 14px', fontWeight: 600 }}>ID Konsultasi</th>
                       <th style={{ padding: '12px 14px', fontWeight: 600 }}>Tanggal Masuk</th>
                       <th style={{ padding: '12px 14px', fontWeight: 600 }}>Customer</th>
@@ -1415,21 +1463,97 @@ export default function AdminDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredOrders.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} style={{ padding: '40px 14px', textAlign: 'center', color: '#767676' }}>
-                          Belum ada pengajuan orderan pada status ini.
+                    <AnimatePresence initial={false} mode="popLayout">
+                    {showOrderSkeleton ? (
+                      [0, 1, 2, 3, 4].map((idx) => (
+                        <motion.tr
+                          key={`order-skeleton-${idx}`}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.2, ease: 'easeOut' }}
+                          style={{ borderBottom: '1px solid #ECE6E0' }}
+                        >
+                          <td style={{ padding: '14px' }}>
+                            <Skeleton style={{ width: 148, height: 14, borderRadius: 6 }} />
+                          </td>
+                          <td style={{ padding: '14px' }}>
+                            <Skeleton style={{ width: 92, height: 13, borderRadius: 6 }} />
+                          </td>
+                          <td style={{ padding: '14px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <Skeleton style={{ width: 118, height: 14, borderRadius: 6 }} />
+                              <Skeleton style={{ width: 152, height: 11, borderRadius: 5 }} />
+                            </div>
+                          </td>
+                          <td style={{ padding: '14px' }}>
+                            <Skeleton style={{ width: 88, height: 13, borderRadius: 6 }} />
+                          </td>
+                          <td style={{ padding: '14px' }}>
+                            <Skeleton style={{ width: 126, height: 32, borderRadius: 999 }} />
+                          </td>
+                          <td style={{ padding: '14px' }}>
+                            <Skeleton style={{ width: 84, height: 22, borderRadius: 6 }} />
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right' }}>
+                            <Skeleton style={{ width: 118, height: 32, borderRadius: 999, marginLeft: 'auto' }} />
+                          </td>
+                        </motion.tr>
+                      ))
+                    ) : filteredOrders.length === 0 ? (
+                      <motion.tr
+                        key="orders-empty-state"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.18 }}
+                      >
+                        <td colSpan={7} style={{ padding: '56px 14px', textAlign: 'center' }}>
+                          <div
+                            style={{
+                              width: 52,
+                              height: 52,
+                              borderRadius: '50%',
+                              backgroundColor: 'rgba(243, 115, 56, 0.1)',
+                              color: '#F37338',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              margin: '0 auto 12px',
+                            }}
+                          >
+                            <IconInboxEmpty size={26} />
+                          </div>
+                          <h4 style={{ fontSize: 14, fontWeight: 700, color: '#141413', margin: '0 0 4px' }}>
+                            {orderStatusFilter === 'Semua'
+                              ? 'Belum Ada Pengajuan Orderan'
+                              : `Tidak Ada Orderan Berstatus ${orderStatusFilter}`}
+                          </h4>
+                          <p style={{ fontSize: 12, color: '#71717A', maxWidth: 360, margin: '0 auto', lineHeight: 1.5 }}>
+                            Pengajuan konsultasi dari customer akan otomatis tercatat di sini sesuai dengan filter status yang dipilih.
+                          </p>
                         </td>
-                      </tr>
+                      </motion.tr>
                     ) : (
                       filteredOrders.map((ord) => {
                         const currentStatusNorm = normalizeOrderStatus(ord.status);
                         return (
-                          <tr
+                          <motion.tr
+                            layout
                             key={ord.consultationId}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, x: -12 }}
+                            transition={{ duration: 0.2, ease: 'easeOut' }}
                             style={{
-                              borderBottom: '1px solid #EAE6E1',
+                              borderBottom: '1px solid #ECE6E0',
                               transition: 'background-color 0.15s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#FAF7F5';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
                             }}
                           >
                             <td style={{ padding: '14px', fontFamily: 'monospace', fontWeight: 600, color: '#141413' }}>
@@ -1438,7 +1562,7 @@ export default function AdminDashboardPage() {
                                 <CopyPill text={ord.consultationId} />
                               </div>
                             </td>
-                            <td style={{ padding: '14px', color: '#696969', whiteSpace: 'nowrap' }}>
+                            <td style={{ padding: '14px', color: '#6B6B6B', whiteSpace: 'nowrap' }}>
                               {ord.submittedAt}
                             </td>
                             <td style={{ padding: '14px' }}>
@@ -1446,7 +1570,7 @@ export default function AdminDashboardPage() {
                                 {ord.customerName || 'Customer'}
                               </p>
                               {ord.notes && (
-                                <p style={{ fontSize: 11, color: '#767676', margin: '2px 0 0', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <p style={{ fontSize: 11, color: '#71717A', margin: '2px 0 0', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   Catatan: &ldquo;{ord.notes}&rdquo;
                                 </p>
                               )}
@@ -1457,21 +1581,17 @@ export default function AdminDashboardPage() {
                             <td style={{ padding: '14px' }}>
                               <button
                                 type="button"
+                                className="btn-secondary"
                                 onClick={() => setSelectedOrder(ord)}
                                 style={{
-                                  background: '#F3F0EE',
-                                  border: '1px solid #EAE6E1',
-                                  borderRadius: 6,
-                                  padding: '5px 12px',
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  color: '#141413',
-                                  cursor: 'pointer',
+                                  padding: '7px 16px',
+                                  fontSize: 12.5,
+                                  fontWeight: 500,
                                   fontFamily: 'inherit',
                                   whiteSpace: 'nowrap',
                                 }}
                               >
-                                Lihat Referensi
+                                <span>Lihat Referensi</span>
                               </button>
                             </td>
                             <td style={{ padding: '14px' }}>
@@ -1509,135 +1629,180 @@ export default function AdminDashboardPage() {
                             <td style={{ padding: '14px', textAlign: 'right' }}>
                               <button
                                 type="button"
+                                className="btn-primary"
                                 onClick={() => setSelectedOrder(ord)}
                                 style={{
-                                  background: '#141413',
-                                  border: 'none',
-                                  borderRadius: 6,
-                                  padding: '6px 14px',
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  color: '#FFFFFF',
-                                  cursor: 'pointer',
+                                  padding: '7px 18px',
+                                  fontSize: 12.5,
+                                  fontWeight: 500,
                                   fontFamily: 'inherit',
                                   whiteSpace: 'nowrap',
                                 }}
                               >
-                                Kelola Status
+                                <span>Kelola Status</span>
                               </button>
                             </td>
-                          </tr>
+                          </motion.tr>
                         );
                       })
                     )}
+                    </AnimatePresence>
                   </tbody>
                 </table>
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
-        {/* ── TAB 3: IMPORT PENJUALAN OFFLINE ── */}
+        {/* ── TAB 2: IMPORT PENJUALAN OFFLINE ── */}
         {activeMenu === 'import' && (
-          <div>
+          <motion.div
+            key="admin-tab-import"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
+          >
             {/* Box Upload */}
             <div
+              className="dashboard-card"
               style={{
                 backgroundColor: '#FFFFFF',
-                border: '1px solid #EAE6E1',
-                borderRadius: 14,
-                padding: '28px 32px',
-                marginBottom: 28,
+                border: '1px solid #ECE6E0',
+                borderRadius: 16,
+                padding: '24px 28px',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#141413', margin: 0 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#141413', margin: 0 }}>
                     Unggah Berkas Penjualan Offline (.csv / .xlsx)
                   </h3>
-                  <p style={{ fontSize: 12, color: '#696969', margin: '3px 0 0' }}>
+                  <p style={{ fontSize: 12, color: '#71717A', margin: '3px 0 0' }}>
                     Sistem akan mengekstrak tanggal, nama pelanggan, item desain, dan nominal secara otomatis.
                   </p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="admin-import-actions" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <button
                     type="button"
+                    className="btn-secondary"
                     onClick={handleDownloadTemplate}
                     style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      background: 'none',
-                      border: '1px solid #D1CDC7',
-                      borderRadius: 8,
-                      padding: '7px 14px',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: '#141413',
-                      cursor: 'pointer',
+                      padding: '8px 18px',
+                      fontSize: 13,
+                      fontWeight: 500,
                       fontFamily: 'inherit',
                     }}
                   >
-                    <IconDownload size={13} />
+                    <IconDownload size={14} />
                     <span>Unduh Template CSV</span>
                   </button>
 
                   <button
                     type="button"
+                    className="btn-secondary"
                     onClick={handleSeedOfflineDemo}
                     style={{
-                      background: '#F3F0EE',
-                      border: '1px solid #EAE6E1',
-                      borderRadius: 8,
-                      padding: '7px 14px',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: '#141413',
-                      cursor: 'pointer',
+                      padding: '8px 18px',
+                      fontSize: 13,
+                      fontWeight: 500,
                       fontFamily: 'inherit',
                     }}
                   >
-                    + Muat Contoh Data (Demo)
+                    <span>+ Muat Contoh Data (Demo)</span>
                   </button>
                 </div>
               </div>
 
               {/* Area Drag-and-Drop / Upload */}
-              <div
+              <motion.div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setIsDragging(false);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  const droppedFile = e.dataTransfer.files?.[0];
+                  if (droppedFile) {
+                    void processUploadedFile(droppedFile);
+                  }
+                }}
+                animate={{
+                  scale: isDragging ? 1.01 : 1,
+                  borderColor: isDragging ? '#F37338' : '#D5D0C8',
+                  backgroundColor: isDragging ? 'rgba(243, 115, 56, 0.08)' : 'rgba(243, 115, 56, 0.04)',
+                }}
+                whileHover={{
+                  borderColor: '#F37338',
+                  backgroundColor: 'rgba(243, 115, 56, 0.07)',
+                }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
                 style={{
-                  border: '1px dashed #D5D0C8',
-                  borderRadius: 12,
-                  padding: '36px 24px',
+                  borderWidth: '1.5px',
+                  borderStyle: 'dashed',
+                  borderColor: '#D5D0C8',
+                  backgroundColor: 'rgba(243, 115, 56, 0.04)',
+                  borderRadius: 14,
+                  padding: '36px 20px',
                   textAlign: 'center',
-                  background: 'transparent',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
                   marginBottom: 16,
+                  cursor: 'pointer',
                 }}
               >
-                <div style={{ color: '#767676', marginBottom: 10 }}>
-                  <IconUploadCloud size={32} />
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(243, 115, 56, 0.12)',
+                    color: '#F37338',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 12,
+                  }}
+                >
+                  <IconUploadCloud size={26} />
                 </div>
                 <p style={{ fontSize: 14, fontWeight: 700, color: '#141413', margin: '0 0 4px' }}>
                   Pilih atau Tarik Berkas ke Sini
                 </p>
-                <p style={{ fontSize: 12, color: '#767676', margin: '0 0 16px' }}>
+                <p style={{ fontSize: 12, color: '#71717A', margin: '0 0 16px' }}>
                   Mendukung berkas Excel (.xlsx, .xls) dan CSV (.csv)
                 </p>
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
                   className="btn-primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
                   style={{
-                    padding: '9px 24px',
+                    padding: '10px 24px',
                     fontSize: 13,
-                    fontWeight: 600,
+                    fontWeight: 500,
+                    fontFamily: 'inherit',
                   }}
                 >
-                  Pilih Berkas Komputer
+                  <span>Pilih Berkas Komputer</span>
                 </button>
                 <input
                   ref={fileInputRef}
@@ -1646,11 +1811,70 @@ export default function AdminDashboardPage() {
                   onChange={handleFileChange}
                   style={{ display: 'none' }}
                 />
+              </motion.div>
+
+              {/* Format Kolom Wajib CSV/Excel — Flat List */}
+              <div
+                style={{
+                  marginTop: 20,
+                  paddingTop: 20,
+                  borderTop: '1px solid #ECE6E0',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ color: '#F37338', display: 'flex' }}>
+                    <IconInfo size={15} />
+                  </span>
+                  <h4 style={{ fontSize: 13.5, fontWeight: 700, color: '#141413', margin: 0 }}>
+                    Format Kolom Wajib Berkas Penjualan Offline
+                  </h4>
+                </div>
+                <p style={{ fontSize: 12, color: '#71717A', margin: '0 0 12px', lineHeight: 1.5 }}>
+                  Pastikan baris header (baris pertama) berkas Excel atau CSV Anda memuat 4 nama kolom berikut:
+                </p>
+
+                <div style={{ borderTop: '1px solid #ECE6E0' }}>
+                  {[
+                    { col: 'tanggal', desc: 'Tanggal transaksi penjualan (format YYYY-MM-DD atau DD/MM/YYYY)' },
+                    { col: 'nama_pelanggan', desc: 'Nama lengkap customer atau pembeli' },
+                    { col: 'item_desain', desc: 'Nama model atau desain press-on nails' },
+                    { col: 'nominal', desc: 'Angka harga murni tanpa titik atau huruf (cth: 145000)' },
+                  ].map((item, idx, arr) => (
+                    <div
+                      key={item.col}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 16,
+                        padding: '10px 4px',
+                        borderBottom: idx < arr.length - 1 ? '1px solid #ECE6E0' : 'none',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: 'monospace',
+                          fontSize: 12.5,
+                          fontWeight: 700,
+                          color: '#F37338',
+                          minWidth: 140,
+                        }}
+                      >
+                        {item.col}
+                      </span>
+                      <span style={{ fontSize: 12, color: '#6B6B6B', flex: 1 }}>
+                        {item.desc}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {importError && (
                 <div
                   style={{
+                    marginTop: 16,
                     padding: '12px 16px',
                     backgroundColor: '#FFF1F2',
                     border: '1px solid #FECDD3',
@@ -1670,7 +1894,7 @@ export default function AdminDashboardPage() {
                   style={{
                     marginTop: 24,
                     paddingTop: 20,
-                    borderTop: '1px solid #EAE6E1',
+                    borderTop: '1px solid #ECE6E0',
                   }}
                 >
                   <div
@@ -1687,9 +1911,9 @@ export default function AdminDashboardPage() {
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#141413' }}>
                         Pratinjau Berkas: {previewFileName}
                       </span>
-                      <p style={{ fontSize: 12, color: '#696969', margin: '2px 0 0' }}>
+                      <p style={{ fontSize: 12, color: '#6B6B6B', margin: '2px 0 0' }}>
                         Ditemukan <strong>{previewRows.length} baris transaksi</strong> dengan total nominal{' '}
-                        <strong style={{ color: '#F37338' }}>
+                        <strong style={{ color: '#141413' }}>
                           {formatRupiah(previewRows.reduce((a, b) => a + b.nominal, 0))}
                         </strong>
                       </p>
@@ -1698,45 +1922,42 @@ export default function AdminDashboardPage() {
                     <div style={{ display: 'flex', gap: 10 }}>
                       <button
                         type="button"
+                        className="btn-secondary"
                         onClick={() => {
                           setPreviewRows(null);
                           setPreviewFileName('');
                           if (fileInputRef.current) fileInputRef.current.value = '';
                         }}
                         style={{
-                          background: 'none',
-                          border: '1px solid #EAE6E1',
-                          borderRadius: 8,
-                          padding: '8px 18px',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: '#141413',
-                          cursor: 'pointer',
+                          padding: '9px 20px',
+                          fontSize: 13,
+                          fontWeight: 500,
                           fontFamily: 'inherit',
                         }}
                       >
-                        Batal
+                        <span>Batal</span>
                       </button>
                       <button
                         type="button"
-                        onClick={handleConfirmImport}
                         className="btn-primary"
+                        onClick={handleConfirmImport}
                         style={{
-                          padding: '8px 24px',
+                          padding: '9px 24px',
                           fontSize: 13,
-                          fontWeight: 600,
+                          fontWeight: 500,
+                          fontFamily: 'inherit',
                         }}
                       >
-                        Gabungkan ke Data Penjualan →
+                        <span>Gabungkan ke Data Penjualan →</span>
                       </button>
                     </div>
                   </div>
 
                   {/* Preview Table */}
-                  <div style={{ overflowX: 'auto', maxHeight: 280, border: '1px solid #EAE6E1', borderRadius: 8 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12 }}>
-                      <thead style={{ position: 'sticky', top: 0, background: '#F3F0EE' }}>
-                        <tr style={{ borderBottom: '1px solid #EAE6E1', color: '#767676' }}>
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxHeight: 280, border: '1px solid #ECE6E0', borderRadius: 10 }}>
+                    <table style={{ width: '100%', minWidth: 560, borderCollapse: 'collapse', textAlign: 'left', fontSize: 12 }}>
+                      <thead style={{ position: 'sticky', top: 0, background: '#F8F5F2' }}>
+                        <tr style={{ borderBottom: '1px solid #ECE6E0', color: '#71717A' }}>
                           <th style={{ padding: '8px 12px' }}>No</th>
                           <th style={{ padding: '8px 12px' }}>Tanggal</th>
                           <th style={{ padding: '8px 12px' }}>Nama Pelanggan</th>
@@ -1746,12 +1967,12 @@ export default function AdminDashboardPage() {
                       </thead>
                       <tbody>
                         {previewRows.slice(0, 10).map((row, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid #EAE6E1' }}>
-                            <td style={{ padding: '8px 12px', color: '#767676' }}>{idx + 1}</td>
-                            <td style={{ padding: '8px 12px', color: '#696969' }}>{row.tanggal}</td>
-                            <td style={{ padding: '8px 12px', fontWeight: 600 }}>{row.namaPelanggan}</td>
-                            <td style={{ padding: '8px 12px', color: '#696969' }}>{row.itemDesain}</td>
-                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>
+                          <tr key={idx} style={{ borderBottom: '1px solid #ECE6E0' }}>
+                            <td style={{ padding: '8px 12px', color: '#71717A' }}>{idx + 1}</td>
+                            <td style={{ padding: '8px 12px', color: '#6B6B6B' }}>{row.tanggal}</td>
+                            <td style={{ padding: '8px 12px', fontWeight: 600, color: '#141413' }}>{row.namaPelanggan}</td>
+                            <td style={{ padding: '8px 12px', color: '#6B6B6B' }}>{row.itemDesain}</td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: '#141413' }}>
                               {formatRupiah(row.nominal)}
                             </td>
                           </tr>
@@ -1760,7 +1981,7 @@ export default function AdminDashboardPage() {
                     </table>
                   </div>
                   {previewRows.length > 10 && (
-                    <p style={{ fontSize: 11, color: '#767676', marginTop: 6, textAlign: 'center' }}>
+                    <p style={{ fontSize: 11, color: '#71717A', marginTop: 6, textAlign: 'center' }}>
                       (Menampilkan 10 baris pertama dari {previewRows.length} data yang terbaca)
                     </p>
                   )}
@@ -1770,26 +1991,27 @@ export default function AdminDashboardPage() {
 
             {/* Riwayat Batch yang Pernah Di-import */}
             <div
+              className="dashboard-card"
               style={{
                 backgroundColor: '#FFFFFF',
-                border: '1px solid #EAE6E1',
-                borderRadius: 14,
+                border: '1px solid #ECE6E0',
+                borderRadius: 16,
                 padding: '24px 28px',
               }}
             >
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#141413', margin: '0 0 16px' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#141413', margin: '0 0 16px' }}>
                 Riwayat Berkas yang Pernah Di-import
               </h3>
 
               {offlineBatches.length === 0 ? (
-                <p style={{ fontSize: 13, color: '#767676', margin: '20px 0', textAlign: 'center' }}>
+                <p style={{ fontSize: 13, color: '#71717A', margin: '20px 0', textAlign: 'center' }}>
                   Belum ada berkas offline yang di-import.
                 </p>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+                  <table style={{ width: '100%', minWidth: 620, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                     <thead>
-                      <tr style={{ borderBottom: '1px solid #EAE6E1', color: '#767676', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      <tr style={{ borderBottom: '1px solid #ECE6E0', color: '#71717A', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         <th style={{ padding: '10px 14px', fontWeight: 600 }}>Nama Berkas</th>
                         <th style={{ padding: '10px 14px', fontWeight: 600 }}>Waktu Import</th>
                         <th style={{ padding: '10px 14px', fontWeight: 600 }}>Jumlah Transaksi</th>
@@ -1799,17 +2021,17 @@ export default function AdminDashboardPage() {
                     </thead>
                     <tbody>
                       {offlineBatches.map((batch) => (
-                        <tr key={batch.batchId} style={{ borderBottom: '1px solid #EAE6E1' }}>
+                        <tr key={batch.batchId} style={{ borderBottom: '1px solid #ECE6E0' }}>
                           <td style={{ padding: '14px', fontWeight: 600, color: '#141413' }}>
                             {batch.fileName}
                           </td>
-                          <td style={{ padding: '14px', color: '#696969' }}>
+                          <td style={{ padding: '14px', color: '#6B6B6B' }}>
                             {batch.importedAt}
                           </td>
                           <td style={{ padding: '14px', color: '#141413' }}>
                             {batch.rowCount} baris
                           </td>
-                          <td style={{ padding: '14px', fontWeight: 700, color: '#F37338' }}>
+                          <td style={{ padding: '14px', fontWeight: 700, color: '#141413' }}>
                             {formatRupiah(batch.totalNominal)}
                           </td>
                           <td style={{ padding: '14px', textAlign: 'right' }}>
@@ -1817,18 +2039,25 @@ export default function AdminDashboardPage() {
                               type="button"
                               onClick={() => handleDeleteBatch(batch.batchId, batch.fileName)}
                               style={{
-                                background: 'none',
+                                backgroundColor: 'transparent',
                                 border: '1px solid #FECDD3',
-                                borderRadius: 6,
-                                padding: '5px 10px',
-                                fontSize: 12,
-                                fontWeight: 600,
+                                borderRadius: 9999,
+                                padding: '7px 16px',
+                                fontSize: 12.5,
+                                fontWeight: 500,
                                 color: '#E11D48',
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: 4,
+                                gap: 5,
                                 fontFamily: 'inherit',
+                                transition: 'all 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#FFF1F2';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
                               }}
                             >
                               <IconTrash size={12} />
@@ -1842,13 +2071,17 @@ export default function AdminDashboardPage() {
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
+        </div>
       </main>
 
       {/* ── MODAL POP-UP LIHAT REFERENSI & STATUS ORDERAN ── */}
+      <AnimatePresence>
       {selectedOrder && (
         <ReferenceDetailModal
+          key={selectedOrder.consultationId}
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
           onSaveStatus={async (newStatus, feedback, estimasiHarga, shopeeUrl) => {
@@ -1873,6 +2106,7 @@ export default function AdminDashboardPage() {
           }}
         />
       )}
+      </AnimatePresence>
 
       {/* ── TOAST NOTIFICATION ── */}
       {toastMessage && (
@@ -1882,11 +2116,11 @@ export default function AdminDashboardPage() {
             bottom: 24,
             right: 24,
             zIndex: 10003,
-            background: '#141413',
+            background: '#18181B',
             color: '#FFFFFF',
             padding: '12px 20px',
             borderRadius: 12,
-            boxShadow: '0 8px 24px rgba(20, 20, 19, 0.25)',
+            boxShadow: '0 8px 24px rgba(24, 24, 27, 0.25)',
             display: 'flex',
             alignItems: 'center',
             gap: 10,
@@ -1935,8 +2169,12 @@ function ReferenceDetailModal({
   };
 
   return (
-    <div
+    <motion.div
       onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -1950,13 +2188,18 @@ function ReferenceDetailModal({
         padding: 20,
       }}
     >
-      <div
+      <motion.div
         onClick={(e) => e.stopPropagation()}
+        className="dinail-modal-card"
+        initial={{ opacity: 0, scale: 0.96, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 6 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
         style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 20,
           padding: '28px 32px',
-          maxWidth: 720,
+          maxWidth: 'min(720px, 94vw)',
           width: '100%',
           maxHeight: '90vh',
           overflowY: 'auto',
@@ -1971,12 +2214,12 @@ function ReferenceDetailModal({
             justifyContent: 'space-between',
             alignItems: 'flex-start',
             paddingBottom: 16,
-            borderBottom: '1px solid #EAE6E1',
+            borderBottom: '1px solid #ECE6E0',
             marginBottom: 20,
           }}
         >
           <div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#767676', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#71717A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Detail Pengajuan Desain &amp; Kelola Orderan
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
@@ -1985,8 +2228,8 @@ function ReferenceDetailModal({
               </h2>
               <CopyPill text={order.consultationId} />
             </div>
-            <p style={{ fontSize: 12, color: '#767676', margin: '4px 0 0' }}>
-              Customer: <strong>{order.customerName || 'Customer'}</strong> · Masuk pada: {order.submittedAt}
+            <p style={{ fontSize: 12, color: '#71717A', margin: '4px 0 0' }}>
+              Customer: <strong style={{ color: '#141413' }}>{order.customerName || 'Customer'}</strong> · Masuk pada: {order.submittedAt}
             </p>
           </div>
 
@@ -1995,8 +2238,8 @@ function ReferenceDetailModal({
             onClick={onClose}
             aria-label="Tutup"
             style={{
-              background: '#F3F0EE',
-              border: 'none',
+              background: '#F8F5F2',
+              border: '1px solid #ECE6E0',
               borderRadius: '50%',
               width: 32,
               height: 32,
@@ -2014,6 +2257,7 @@ function ReferenceDetailModal({
 
         {/* Content Body: Grid 2 Kolom */}
         <div
+          className="profil-two-col-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
@@ -2033,8 +2277,8 @@ function ReferenceDetailModal({
                 borderRadius: 12,
                 overflow: 'hidden',
                 position: 'relative',
-                border: '1px solid #EAE6E1',
-                backgroundColor: '#F3F0EE',
+                border: '1px solid #ECE6E0',
+                backgroundColor: '#F8F5F2',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -2046,24 +2290,26 @@ function ReferenceDetailModal({
                   src={order.photoUrl}
                   alt="Referensi Desain Customer"
                   fill
+                  sizes="(max-width: 768px) 92vw, 520px"
                   unoptimized={order.photoUrl.startsWith('data:')}
                   style={{ objectFit: 'contain' }}
                 />
               ) : (
-                <span style={{ fontSize: 12, color: '#767676' }}>Tidak ada foto referensi</span>
+                <span style={{ fontSize: 12, color: '#71717A' }}>Tidak ada foto referensi</span>
               )}
             </div>
 
             {/* Link Referensi Desain */}
             <div>
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', display: 'block', marginBottom: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#71717A', display: 'block', marginBottom: 4 }}>
                 Tautan / Link Referensi:
               </span>
               {order.referenceLink ? (
                 <div
                   style={{
                     padding: '8px 12px',
-                    backgroundColor: '#F3F0EE',
+                    backgroundColor: '#F8F5F2',
+                    border: '1px solid #ECE6E0',
                     borderRadius: 8,
                     fontSize: 12,
                     wordBreak: 'break-all',
@@ -2077,7 +2323,7 @@ function ReferenceDetailModal({
                   <CopyPill text={order.referenceLink} />
                 </div>
               ) : (
-                <span style={{ fontSize: 12, color: '#888888', fontStyle: 'italic' }}>
+                <span style={{ fontSize: 12, color: '#71717A', fontStyle: 'italic' }}>
                   Customer tidak menyertakan link eksternal
                 </span>
               )}
@@ -2094,13 +2340,13 @@ function ReferenceDetailModal({
             <div
               style={{
                 padding: '12px 14px',
-                backgroundColor: '#F3F0EE',
+                backgroundColor: '#F8F5F2',
                 borderRadius: 10,
-                border: '1px solid #EAE6E1',
+                border: '1px solid #ECE6E0',
                 marginBottom: 14,
               }}
             >
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', textTransform: 'uppercase' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#71717A', textTransform: 'uppercase' }}>
                 Ukuran Kuku Customer:
               </span>
               <p style={{ fontSize: 13, fontWeight: 700, color: '#141413', margin: '4px 0 0' }}>
@@ -2112,13 +2358,13 @@ function ReferenceDetailModal({
             <div
               style={{
                 padding: '12px 14px',
-                backgroundColor: '#F3F0EE',
+                backgroundColor: '#F8F5F2',
                 borderRadius: 10,
-                border: '1px solid #EAE6E1',
+                border: '1px solid #ECE6E0',
                 marginBottom: 14,
               }}
             >
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', textTransform: 'uppercase' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#71717A', textTransform: 'uppercase' }}>
                 Catatan Kustomisasi Customer:
               </span>
               <p style={{ fontSize: 13, color: '#141413', margin: '4px 0 0', lineHeight: 1.5 }}>
@@ -2128,7 +2374,7 @@ function ReferenceDetailModal({
 
             {/* Estimasi Harga */}
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#767676', display: 'block', marginBottom: 4 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#71717A', display: 'block', marginBottom: 4 }}>
                 Estimasi Harga Desain (Untuk Customer):
               </label>
               <input
@@ -2140,7 +2386,7 @@ function ReferenceDetailModal({
                   width: '100%',
                   padding: '9px 12px',
                   fontSize: 13,
-                  border: '1px solid #EAE6E1',
+                  border: '1px solid #ECE6E0',
                   borderRadius: 8,
                   background: '#FFFFFF',
                   color: '#141413',
@@ -2153,7 +2399,7 @@ function ReferenceDetailModal({
         </div>
 
         {/* ── BAGIAN UBAH STATUS & FEEDBACK PENOLAKAN ── */}
-        <div style={{ paddingTop: 18, borderTop: '1px solid #EAE6E1' }}>
+        <div style={{ paddingTop: 18, borderTop: '1px solid #ECE6E0' }}>
           <h4 style={{ fontSize: 13, fontWeight: 700, color: '#141413', marginBottom: 12 }}>
             Pilih Status Orderan
           </h4>
@@ -2178,22 +2424,22 @@ function ReferenceDetailModal({
                         ? '2px solid #16A34A'
                         : st === 'Ditolak'
                         ? '2px solid #E11D48'
-                        : '2px solid #141413'
-                      : '1px solid #EAE6E1',
+                        : '2px solid #F37338'
+                      : '1px solid #ECE6E0',
                     background: isSelected
                       ? st === 'Disetujui'
                         ? '#F0FDF4'
                         : st === 'Ditolak'
                         ? '#FFF1F2'
-                        : '#F3F0EE'
+                        : 'rgba(243, 115, 56, 0.08)'
                       : '#FFFFFF',
                     color: isSelected
                       ? st === 'Disetujui'
                         ? '#16A34A'
                         : st === 'Ditolak'
                         ? '#E11D48'
-                        : '#141413'
-                      : '#696969',
+                        : '#F37338'
+                      : '#6B6B6B',
                     fontWeight: isSelected ? 700 : 500,
                     fontSize: 13,
                     cursor: 'pointer',
@@ -2208,85 +2454,105 @@ function ReferenceDetailModal({
           </div>
 
           {/* Area Khusus Jika Ditolak: Input Feedback Wajib */}
-          {selectedStatus === 'Ditolak' && (
-            <div
-              style={{
-                padding: '16px 18px',
-                backgroundColor: '#FFF1F2',
-                border: '1.5px solid #FECDD3',
-                borderRadius: 12,
-                marginBottom: 20,
-              }}
-            >
-              <label style={{ fontSize: 12, fontWeight: 700, color: '#E11D48', display: 'block', marginBottom: 6 }}>
-                Feedback / Alasan Penolakan ke Customer * (Wajib Diisi)
-              </label>
-              <textarea
-                rows={3}
-                value={feedback}
-                onChange={(e) => {
-                  setFeedback(e.target.value);
-                  if (e.target.value.trim()) setFeedbackError('');
-                }}
-                placeholder="Tuliskan alasan penolakan atau instruksi perbaikan (contoh: Foto kuku kurang jelas, mohon ambil foto ulang dengan koin pembanding...)"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  fontSize: 13,
-                  borderRadius: 8,
-                  border: feedbackError ? '1px solid #DC2626' : '1px solid #FECDD3',
-                  backgroundColor: '#FFFFFF',
-                  color: '#141413',
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                  resize: 'vertical',
-                }}
-              />
-              {feedbackError && (
-                <p style={{ fontSize: 11, color: '#DC2626', fontWeight: 600, marginTop: 4 }}>
-                  {feedbackError}
-                </p>
-              )}
+          <AnimatePresence initial={false}>
+            {selectedStatus === 'Ditolak' && (
+              <motion.div
+                key="reject-feedback-section"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                className="overflow-hidden"
+                style={{ overflow: 'hidden' }}
+              >
+                <div
+                  style={{
+                    padding: '16px 18px',
+                    backgroundColor: '#FFF1F2',
+                    border: '1.5px solid #FECDD3',
+                    borderRadius: 12,
+                    marginBottom: 20,
+                  }}
+                >
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#E11D48', display: 'block', marginBottom: 6 }}>
+                    Feedback / Alasan Penolakan ke Customer * (Wajib Diisi)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={feedback}
+                    onChange={(e) => {
+                      setFeedback(e.target.value);
+                      if (e.target.value.trim()) setFeedbackError('');
+                    }}
+                    placeholder="Tuliskan alasan penolakan atau instruksi perbaikan (contoh: Foto kuku kurang jelas, mohon ambil foto ulang dengan koin pembanding...)"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      fontSize: 13,
+                      borderRadius: 8,
+                      border: feedbackError ? '1px solid #DC2626' : '1px solid #FECDD3',
+                      backgroundColor: '#FFFFFF',
+                      color: '#141413',
+                      outline: 'none',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                    }}
+                  />
+                  {feedbackError && (
+                    <p style={{ fontSize: 11, color: '#DC2626', fontWeight: 600, marginTop: 4 }}>
+                      {feedbackError}
+                    </p>
+                  )}
 
-              {/* Template Alasan Cepat */}
-              <div style={{ marginTop: 10 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', display: 'block', marginBottom: 4 }}>
-                  Pilih cepat alasan umum:
-                </span>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {[
-                    'Foto kuku kurang jelas, mohon foto ulang tegak lurus dengan koin Rp 500.',
-                    'Detail desain terlalu kompleks untuk bentuk kuku yang dipilih.',
-                    'Charm atau aksesori untuk model desain ini sedang kehabisan stok.',
-                  ].map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleApplyFeedbackTemplate(preset)}
-                      style={{
-                        background: '#FFFFFF',
-                        border: '1px solid #EAE6E1',
-                        borderRadius: 6,
-                        padding: '4px 10px',
-                        fontSize: 11,
-                        color: '#696969',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        fontFamily: 'inherit',
-                      }}
-                    >
-                      + {preset.slice(0, 38)}...
-                    </button>
-                  ))}
+                  {/* Template Alasan Cepat */}
+                  <div style={{ marginTop: 10 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#71717A', display: 'block', marginBottom: 4 }}>
+                      Pilih cepat alasan umum:
+                    </span>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {[
+                        'Foto kuku kurang jelas, mohon foto ulang tegak lurus dengan koin Rp 500.',
+                        'Detail desain terlalu kompleks untuk bentuk kuku yang dipilih.',
+                        'Charm atau aksesori untuk model desain ini sedang kehabisan stok.',
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleApplyFeedbackTemplate(preset)}
+                          style={{
+                            backgroundColor: '#FFFFFF',
+                            border: '1px solid #E5DDD5',
+                            borderRadius: 9999,
+                            padding: '5px 12px',
+                            fontSize: 11.5,
+                            fontWeight: 500,
+                            color: '#141413',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            fontFamily: 'inherit',
+                            transition: 'all 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#FAF7F5';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#FFFFFF';
+                          }}
+                        >
+                          + {preset.slice(0, 38)}...
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Area Khusus Jika Disetujui: Link Shopee */}
           {selectedStatus === 'Disetujui' && (
             <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#767676', display: 'block', marginBottom: 4 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#71717A', display: 'block', marginBottom: 4 }}>
                 Tautan Checkout Shopee (Opsional):
               </label>
               <input
@@ -2298,9 +2564,9 @@ function ReferenceDetailModal({
                   width: '100%',
                   padding: '9px 12px',
                   fontSize: 13,
-                  border: '1px solid #EAE6E1',
+                  border: '1px solid #ECE6E0',
                   borderRadius: 8,
-                  background: '#F9F8F6',
+                  background: '#F8F5F2',
                   color: '#141413',
                   outline: 'none',
                   fontFamily: 'inherit',
@@ -2313,39 +2579,59 @@ function ReferenceDetailModal({
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
             <button
               type="button"
+              className="btn-secondary"
               onClick={onClose}
               style={{
-                padding: '10px 20px',
-                borderRadius: 8,
-                background: 'none',
-                border: '1px solid #EAE6E1',
+                padding: '10px 22px',
                 fontSize: 13,
-                fontWeight: 600,
-                color: '#141413',
-                cursor: 'pointer',
+                fontWeight: 500,
                 fontFamily: 'inherit',
               }}
             >
-              Batal
+              <span>Batal</span>
             </button>
             <button
               type="button"
+              className={selectedStatus === 'Ditolak' ? undefined : 'btn-primary'}
               onClick={handleSave}
-              className="btn-primary"
-              style={{
-                padding: '10px 24px',
-                fontSize: 13,
-                fontWeight: 600,
-                backgroundColor: selectedStatus === 'Ditolak' ? '#DC2626' : undefined,
+              style={
+                selectedStatus === 'Ditolak'
+                  ? {
+                      padding: '10px 26px',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      backgroundColor: '#DC2626',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: 9999,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.2)',
+                      transition: 'background-color 0.15s ease',
+                    }
+                  : {
+                      padding: '10px 26px',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      fontFamily: 'inherit',
+                    }
+              }
+              onMouseEnter={(e) => {
+                if (selectedStatus === 'Ditolak') e.currentTarget.style.backgroundColor = '#B91C1C';
+              }}
+              onMouseLeave={(e) => {
+                if (selectedStatus === 'Ditolak') e.currentTarget.style.backgroundColor = '#DC2626';
               }}
             >
-              {selectedStatus === 'Ditolak'
-                ? 'Kirim Penolakan & Feedback'
-                : 'Simpan Perubahan Status'}
+              <span>
+                {selectedStatus === 'Ditolak'
+                  ? 'Kirim Penolakan & Feedback'
+                  : 'Simpan Perubahan Status'}
+              </span>
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

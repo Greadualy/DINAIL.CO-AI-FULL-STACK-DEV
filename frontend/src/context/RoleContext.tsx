@@ -94,7 +94,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         throw new Error(data.message || 'Gagal sinkronisasi data dengan backend.');
       }
     } catch (error) {
-      console.error('[RoleContext] Backend sync failed, using Firebase profile:', error);
+      console.warn('[RoleContext] Backend sync unavailable, using Firebase profile:', error);
       const fallbackUser: RoleUser = {
         role: 'customer',
         name: firebaseUser.displayName || 'Customer',

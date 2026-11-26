@@ -4,8 +4,10 @@ import { useState, useRef, Suspense, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { motion, AnimatePresence } from 'motion/react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import Skeleton from '@/components/Skeleton';
 import { useRole } from '@/context/RoleContext';
 import { DINAIL_ASSETS } from '@/constants/assets';
 import { auth } from '@/config/firebase';
@@ -40,15 +42,6 @@ function IconConsultation({ size = 18 }: { size?: number }) {
       <line x1="16" y1="13" x2="8" y2="13" />
       <line x1="16" y1="17" x2="8" y2="17" />
       <polyline points="10 9 9 9 8 9" />
-    </svg>
-  );
-}
-
-function IconBell({ size = 18 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
   );
 }
@@ -110,33 +103,6 @@ function IconSearch({ size = 16 }: { size?: number }) {
   );
 }
 
-function IconShoppingBag({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <path d="M16 10a4 4 0 0 1-8 0" />
-    </svg>
-  );
-}
-
-function IconSparkle({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  );
-}
-
-function IconBrush({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08" />
-      <path d="M7.07 14.94c-1.66 0-3 1.34-3 3 0 1.66-1.34 3-3 3 2.76 0 5-2.24 5-5 0-.34-.04-.67-.1-.99" />
-    </svg>
-  );
-}
-
 export type OrderStatus =
   | 'menunggu'
   | 'proses'
@@ -166,7 +132,7 @@ export interface OrderCard {
   reviewedAt?: string;
 }
 
-export type ActiveMenu = 'akun' | 'ukuran' | 'konsultasi' | 'notifikasi';
+export type ActiveMenu = 'akun' | 'ukuran' | 'konsultasi';
 
 export interface NailFingers {
   thumb: number;
@@ -233,12 +199,11 @@ const TAB_LIST: { key: OrderStatus | 'semua'; label: string }[] = [
   { key: 'dibatalkan', label: 'Dibatalkan' },
 ];
 
-// Urutan Menu: Akun Saya -> Ukuran Kuku Saya -> Konsultasi Saya -> Notifikasi -> Keluar
+// Urutan Menu: Akun Saya -> Ukuran Kuku Saya -> Konsultasi Saya -> Keluar
 const MENU_ITEMS: { key: ActiveMenu | 'keluar'; label: string; icon: React.ReactNode }[] = [
   { key: 'akun', label: 'Akun Saya', icon: <IconUser /> },
   { key: 'ukuran', label: 'Ukuran Kuku Saya', icon: <IconRuler /> },
   { key: 'konsultasi', label: 'Konsultasi Saya', icon: <IconConsultation /> },
-  { key: 'notifikasi', label: 'Notifikasi', icon: <IconBell /> },
   { key: 'keluar', label: 'Keluar', icon: <IconLogOut /> },
 ];
 
@@ -387,12 +352,15 @@ function SubmitConfirmationModal({
           backgroundColor: '#FFFFFF',
           borderRadius: 24,
           padding: '32px 28px',
-          maxWidth: 480,
+          maxWidth: 'min(480px, 92vw)',
+          maxHeight: '90vh',
+          overflowY: 'auto',
           width: '100%',
           boxShadow: '0 24px 48px rgba(0, 0, 0, 0.16)',
           textAlign: 'center',
           position: 'relative',
         }}
+        className="dinail-modal-card"
       >
         {/* Success Icon */}
         <div
@@ -532,11 +500,12 @@ function OrderDetailModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="dinail-modal-card"
         style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 24,
           padding: '28px 28px',
-          maxWidth: 520,
+          maxWidth: 'min(520px, 92vw)',
           width: '100%',
           boxShadow: '0 24px 48px rgba(0, 0, 0, 0.16)',
           position: 'relative',
@@ -773,6 +742,9 @@ function OrderCardItem({
         borderRadius: 16,
         overflow: 'hidden',
         marginBottom: 16,
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
         transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
       }}
     >
@@ -788,7 +760,7 @@ function OrderCardItem({
           flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
           <span style={{ fontSize: 12, fontWeight: 500, color: '#696969' }}>
             ID Konsultasi:
           </span>
@@ -798,6 +770,7 @@ function OrderCardItem({
               fontWeight: 700,
               color: '#141413',
               fontFamily: 'monospace',
+              wordBreak: 'break-all',
             }}
           >
             {order.consultationId}
@@ -823,6 +796,7 @@ function OrderCardItem({
 
       {/* 2. Isi Kartu */}
       <div
+        className="profil-order-card-body"
         style={{
           display: 'flex',
           gap: 16,
@@ -924,7 +898,7 @@ function OrderCardItem({
           )}
         </div>
 
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div className="profil-order-price-col" style={{ textAlign: 'right', flexShrink: 0 }}>
           <p
             style={{
               fontSize: 16,
@@ -980,14 +954,16 @@ function OrderCardItem({
 // Konten Tab: Ukuran Kuku Saya (FITUR PENGUKURAN KUKU)
 
 function UkuranKukuTab() {
-  const [nailData, setNailData] = useState<NailSizeData>(() => {
-    if (typeof window !== 'undefined') {
-      return loadNailData();
-    }
-    return DEFAULT_NAIL_DATA;
-  });
+  const [nailData, setNailData] = useState<NailSizeData>(DEFAULT_NAIL_DATA);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setNailData(loadNailData());
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Handle Preset Select
   const handleSelectPreset = (preset: SizePreset) => {
@@ -1084,13 +1060,13 @@ function UkuranKukuTab() {
   ];
 
   return (
-    <div>
+    <div style={{ width: '100%', minWidth: 0 }}>
       {/* 1. Header Bagian */}
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: '#141413', margin: 0 }}>
           Ukuran Kuku Saya
         </h2>
-        <p style={{ fontSize: 13, color: '#696969', margin: '4px 0 0', lineHeight: 1.5 }}>
+        <p style={{ fontSize: 13, color: '#696969', margin: '4px 0 0', lineHeight: 1.5, whiteSpace: 'normal', overflowWrap: 'break-word' }}>
           Simpan data ukuran kuku presisi untuk memastikan press-on nails pas dan nyaman di setiap jarimu.
         </p>
       </div>
@@ -1206,6 +1182,7 @@ function UkuranKukuTab() {
         </div>
 
         <div
+          className="profil-two-col-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
@@ -1334,6 +1311,7 @@ function UkuranKukuTab() {
         </div>
 
         <div
+          className="profil-two-col-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
@@ -1493,7 +1471,7 @@ function UkuranKukuTab() {
         <div>
           <button
             type="button"
-            className="btn-primary"
+            className="btn-primary profil-mobile-full-btn"
             style={{ padding: '12px 30px', fontSize: 14, fontWeight: 600 }}
             onClick={handleSave}
           >
@@ -1509,26 +1487,32 @@ function KonsultasiTab({
   userId,
   userProfileName,
   initialDesign,
+  initialStatus = 'semua',
+  initialOpenForm = false,
   onNavigateToUkuran,
 }: {
   userId?: string | null;
   userProfileName?: string;
   initialDesign?: string;
+  initialStatus?: OrderStatus | 'semua';
+  initialOpenForm?: boolean;
   onNavigateToUkuran?: () => void;
 }) {
-  const [activeStatus, setActiveStatus] = useState<OrderStatus | 'semua'>('semua');
+  const [activeStatus, setActiveStatus] = useState<OrderStatus | 'semua'>(initialStatus);
   const [searchQuery, setSearchQuery] = useState('');
-  const [orders, setOrders] = useState<OrderCard[]>(() => loadOrders(userId));
-  const [showNewForm, setShowNewForm] = useState(Boolean(initialDesign));
+  const [orders, setOrders] = useState<OrderCard[]>([]);
+  const [showNewForm, setShowNewForm] = useState(Boolean(initialDesign || initialOpenForm));
 
   // Form states
+  const [prevProfileName, setPrevProfileName] = useState(userProfileName);
   const [customerName, setCustomerName] = useState(userProfileName && userProfileName !== 'Sari Dewi' ? userProfileName : 'Customer');
 
-  useEffect(() => {
+  if (userProfileName !== prevProfileName) {
+    setPrevProfileName(userProfileName);
     if (userProfileName && userProfileName !== 'Sari Dewi') {
       setCustomerName(userProfileName);
     }
-  }, [userProfileName]);
+  }
   const [newNotes, setNewNotes] = useState('');
   const [refLink, setRefLink] = useState('');
   const [refPhotoUrl, setRefPhotoUrl] = useState<string | null>(null);
@@ -1536,11 +1520,26 @@ function KonsultasiTab({
   const refFileInputRef = useRef<HTMLInputElement>(null);
 
   // Saved nail size state
-  const [savedNailData, setSavedNailData] = useState<NailSizeData | null>(() => getSavedNailData());
+  const [savedNailData, setSavedNailData] = useState<NailSizeData | null>(null);
 
   // Modals state
   const [submittedOrder, setSubmittedOrder] = useState<OrderCard | null>(null);
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<OrderCard | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const hydrateTimer = setTimeout(() => {
+      setOrders(loadOrders(userId));
+      setSavedNailData(getSavedNailData());
+    }, 0);
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 400);
+    return () => {
+      clearTimeout(hydrateTimer);
+      clearTimeout(timer);
+    };
+  }, [userId]);
 
   useEffect(() => {
     const fetchUserConsultations = async () => {
@@ -1552,7 +1551,28 @@ function KonsultasiTab({
         const res = await fetch(`${BACKEND_URL}/api/v1/consultations/me`, { headers });
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          const mapped: OrderCard[] = json.data.map((item: any) => {
+          const mapped: OrderCard[] = json.data.map((item: {
+            consultationCode?: string;
+            id?: string;
+            userId?: string;
+            user?: {
+              name?: string;
+              email?: string;
+              savedSizePreset?: string;
+            };
+            referenceLink?: string;
+            createdAt?: string;
+            status?: string;
+            serviceType?: string;
+            designName?: string;
+            variant?: string;
+            customerNotes?: string;
+            estimatedPrice?: string;
+            photoUrl?: string;
+            shopeeUrl?: string;
+            adminFeedback?: string;
+            reviewedAt?: string;
+          }) => {
             const createdAtDate = item.createdAt ? new Date(item.createdAt) : new Date();
             const dateLabel = createdAtDate.toLocaleDateString('id-ID', {
               day: 'numeric',
@@ -1579,7 +1599,7 @@ function KonsultasiTab({
             }
 
             return {
-              consultationId: item.consultationCode || item.id,
+              consultationId: item.consultationCode || item.id || 'DNL-ORD-UNKNOWN',
               userId: item.userId,
               customerName: item.user?.name || userProfileName || 'Customer',
               nailSizeSummary: item.user?.savedSizePreset ? `Size ${item.user.savedSizePreset}` : 'Size M',
@@ -1724,7 +1744,7 @@ function KonsultasiTab({
         const resJson = await res.json();
         console.log('[Consultation] Successfully synced to backend:', res.status, resJson);
       } catch (err) {
-        console.error('Failed to sync consultation to backend database:', err);
+        console.warn('Backend consultation sync unavailable, saved locally:', err);
       }
     })();
 
@@ -1753,17 +1773,17 @@ function KonsultasiTab({
           flexWrap: 'wrap',
         }}
       >
-        <div>
+        <div style={{ minWidth: 0 }}>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: '#141413', margin: 0 }}>
             Konsultasi Saya
           </h2>
-          <p style={{ fontSize: 13, color: '#696969', margin: '4px 0 0' }}>
+          <p style={{ fontSize: 13, color: '#696969', margin: '4px 0 0', whiteSpace: 'normal', overflowWrap: 'break-word' }}>
             Pantau status pesanan dan proses kustomisasi kuku Anda
           </p>
         </div>
 
         <button
-          className="btn-primary"
+          className="btn-primary profil-mobile-full-btn"
           style={{ padding: '10px 22px', fontSize: 13 }}
           onClick={() => {
             setSavedNailData(getSavedNailData());
@@ -2206,69 +2226,159 @@ function KonsultasiTab({
       </div>
 
       {/* Daftar Kartu Riwayat Konsultasi */}
-      {filtered.length === 0 ? (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '60px 24px',
-            color: '#696969',
-            fontSize: 14,
-            background: '#FFFFFF',
-            borderRadius: 18,
-            border: '1px solid #EAE6E1',
-          }}
-        >
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: '50%',
-              background: '#FFF7F3',
-              border: '1.5px solid #FDDCC8',
-              color: '#F37338',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 18px',
-            }}
+      <AnimatePresence mode="wait">
+        {isLoading ? (
+          <motion.div
+            key="konsultasi-skeleton"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            aria-busy="true"
+            aria-label="Memuat riwayat konsultasi"
           >
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="12" y1="18" x2="12" y2="12" />
-              <line x1="9" y1="15" x2="15" y2="15" />
-            </svg>
-          </div>
-          <p style={{ fontWeight: 700, color: '#141413', fontSize: 18, marginBottom: 8 }}>
-            Belum ada riwayat konsultasi
-          </p>
-          <p style={{ maxWidth: 440, margin: '0 auto 24px', lineHeight: 1.55, fontSize: 13, color: '#696969' }}>
-            {searchQuery
-              ? `Tidak ditemukan riwayat konsultasi yang cocok dengan kata kunci "${searchQuery}".`
-              : activeStatus !== 'semua'
-              ? `Belum ada pesanan pada status "${STATUS_LABEL[activeStatus]}". Mulai konsultasi desain kuku impianmu untuk mendapatkan rekomendasi tier, bentuk, dan estimasi harga.`
-              : 'Mulai konsultasi desain kuku impianmu untuk mendapatkan rekomendasi tier, bentuk, dan estimasi harga.'}
-          </p>
-          <button
-            className="btn-primary"
-            style={{ padding: '12px 28px', fontSize: 14 }}
-            onClick={() => {
-              setSavedNailData(getSavedNailData());
-              setShowNewForm(true);
-            }}
+            {[0, 1, 2].map((idx) => (
+              <div
+                key={`konsultasi-skel-${idx}`}
+                style={{
+                  background: '#FFFFFF',
+                  border: '1px solid #EAE6E1',
+                  borderRadius: 16,
+                  overflow: 'hidden',
+                  marginBottom: 16,
+                }}
+              >
+                {/* Header Skeleton */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '14px 20px',
+                    borderBottom: '1px solid #EAE6E1',
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Skeleton style={{ width: 175, height: 15, borderRadius: 6 }} />
+                    <Skeleton style={{ width: 88, height: 13, borderRadius: 6 }} />
+                  </div>
+                  <Skeleton style={{ width: 112, height: 18, borderRadius: 999 }} />
+                </div>
+
+                {/* Body Skeleton */}
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 16,
+                    padding: '18px 20px',
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  <Skeleton style={{ width: 80, height: 80, borderRadius: 10, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <Skeleton style={{ width: 96, height: 11, borderRadius: 5 }} />
+                    <Skeleton style={{ width: '56%', height: 18, borderRadius: 6 }} />
+                    <Skeleton style={{ width: '40%', height: 13, borderRadius: 6 }} />
+                    <Skeleton style={{ width: '66%', height: 12, borderRadius: 6 }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                    <Skeleton style={{ width: 96, height: 18, borderRadius: 6 }} />
+                    <Skeleton style={{ width: 70, height: 11, borderRadius: 5 }} />
+                  </div>
+                </div>
+
+                {/* Footer Skeleton */}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '12px 20px',
+                    borderTop: '1px solid #EAE6E1',
+                    background: '#FAFAFA',
+                  }}
+                >
+                  <Skeleton style={{ width: 112, height: 34, borderRadius: 999 }} />
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="konsultasi-content"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
           >
-            + Mulai Konsultasi
-          </button>
-        </div>
-      ) : (
-        filtered.map((order) => (
-          <OrderCardItem
-            key={order.consultationId}
-            order={order}
-            onOpenDetail={setSelectedDetailOrder}
-          />
-        ))
-      )}
+            {filtered.length === 0 ? (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '60px 24px',
+                  color: '#696969',
+                  fontSize: 14,
+                  background: '#FFFFFF',
+                  borderRadius: 18,
+                  border: '1px solid #EAE6E1',
+                }}
+              >
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: '50%',
+                    background: '#FFF7F3',
+                    border: '1.5px solid #FDDCC8',
+                    color: '#F37338',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 18px',
+                  }}
+                >
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                  </svg>
+                </div>
+                <p style={{ fontWeight: 700, color: '#141413', fontSize: 18, marginBottom: 8 }}>
+                  Belum ada riwayat konsultasi
+                </p>
+                <p style={{ maxWidth: 440, margin: '0 auto 24px', lineHeight: 1.55, fontSize: 13, color: '#696969' }}>
+                  {searchQuery
+                    ? `Tidak ditemukan riwayat konsultasi yang cocok dengan kata kunci "${searchQuery}".`
+                    : activeStatus !== 'semua'
+                    ? `Belum ada pesanan pada status "${STATUS_LABEL[activeStatus]}". Mulai konsultasi desain kuku impianmu untuk mendapatkan rekomendasi tier, bentuk, dan estimasi harga.`
+                    : 'Mulai konsultasi desain kuku impianmu untuk mendapatkan rekomendasi tier, bentuk, dan estimasi harga.'}
+                </p>
+                <button
+                  className="btn-primary"
+                  style={{ padding: '12px 28px', fontSize: 14 }}
+                  onClick={() => {
+                    setSavedNailData(getSavedNailData());
+                    setShowNewForm(true);
+                  }}
+                >
+                  + Mulai Konsultasi
+                </button>
+              </div>
+            ) : (
+              filtered.map((order) => (
+                <OrderCardItem
+                  key={order.consultationId}
+                  order={order}
+                  onOpenDetail={setSelectedDetailOrder}
+                />
+              ))
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modal Konfirmasi Setelah Submit */}
       {submittedOrder && (
@@ -2392,11 +2502,14 @@ function EditProfileModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="dinail-modal-card"
         style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 20,
           padding: '28px 28px 24px',
-          maxWidth: 480,
+          maxWidth: 'min(480px, 92vw)',
+          maxHeight: '90vh',
+          overflowY: 'auto',
           width: '100%',
           boxShadow: '0 24px 48px rgba(0, 0, 0, 0.16)',
           position: 'relative',
@@ -2687,211 +2800,252 @@ function AkunTab({
   userId: string | null;
   onOpenEdit: () => void;
 }) {
-  return (
-    <div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: '#141413', marginBottom: 6 }}>
-        Akun Saya
-      </h2>
-      <p style={{ fontSize: 13, color: '#696969', marginBottom: 24 }}>
-        Informasi profil pribadi dan ID keanggotaan Anda di dinail.co
-      </p>
+  const [isLoading, setIsLoading] = useState(true);
 
-      {userId && (
-        <div
-          style={{
-            background: '#FFF7F3',
-            border: '1.5px solid #FDDCC8',
-            borderRadius: 14,
-            padding: '16px 20px',
-            marginBottom: 28,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 12,
-            maxWidth: 680,
-          }}
-        >
-          <div>
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', textTransform: 'uppercase' }}>
-              ID Pengguna Terdaftar
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-              <span
-                style={{
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: '#F37338',
-                  fontFamily: 'monospace',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                {userId}
-              </span>
-              <CopyButton text={userId} />
-            </div>
-          </div>
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: '#F37338',
-              background: '#FFFFFF',
-              padding: '4px 12px',
-              borderRadius: 999,
-              border: '1px solid #FDDCC8',
-            }}
-          >
-            MEMBER TERVERIFIKASI
-          </span>
-        </div>
-      )}
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 380);
+    return () => clearTimeout(timer);
+  }, []);
 
-      {/* Flat List Data Profil */}
-      <div style={{ maxWidth: 680 }}>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {[
-            { label: 'ID User', value: userId || 'DNL-USR-8492', isMonospace: true },
-            { label: 'Nama Lengkap', value: profile.name },
-            { label: 'Email Terdaftar', value: profile.email, note: 'Email Utama' },
-            { label: 'Nomor WhatsApp', value: profile.phone || '-' },
-            { label: 'Kota / Wilayah', value: profile.city || '-' },
-          ].map((item, idx, arr) => (
-            <div
-              key={item.label}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '18px 0',
-                borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #EAE6E1',
-                gap: 16,
-              }}
-            >
-              <span style={{ fontSize: 13, color: '#696969', flexShrink: 0 }}>
-                {item.label}
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'right', minWidth: 0 }}>
-                <span
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: '#141413',
-                    fontFamily: item.isMonospace ? 'monospace' : 'inherit',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {item.value}
-                </span>
-                {item.note && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      color: '#16A34A',
-                      background: '#F0FDF4',
-                      border: '1px solid #BBF7D0',
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {item.note}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Tombol Ubah Profil langsung di bawah list informasi */}
-        <div style={{ marginTop: 28 }}>
-          <button
-            className="btn-primary"
-            onClick={onOpenEdit}
-            style={{
-              padding: '12px 28px',
-              fontSize: 14,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <IconEdit size={14} />
-            <span>Ubah Profil</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NotifikasiTab() {
-  const notifs = [
-    {
-      id: 1,
-      icon: <IconBrush size={20} />,
-      title: 'Konsultasi kamu sedang diproses tim artist',
-      desc: 'DNL-KNS-20261114-01 · Milky French Classic sedang dalam antrean pengerjaan desain kuku.',
-      time: '1 jam yang lalu',
-    },
-    {
-      id: 2,
-      icon: <IconShoppingBag size={20} />,
-      title: 'Desain ACC! Pesanan kamu siap checkout',
-      desc: 'DNL-KNS-20261115-03 · Blush Chrome Gradient telah disetujui. Silakan lanjut checkout melalui toko Shopee dinail.co.',
-      time: 'Kemarin',
-    },
-    {
-      id: 3,
-      icon: <IconSparkle size={20} />,
-      title: 'Selamat datang di dinail.co!',
-      desc: 'Akun Anda berhasil terhubung. Mulai konsultasi gratis untuk kustomisasi press-on nails impian Anda.',
-      time: '5 hari yang lalu',
-    },
+  const skeletonRows = [
+    { labelW: 82, valW: 150 },
+    { labelW: 118, valW: 175 },
+    { labelW: 126, valW: 215 },
+    { labelW: 132, valW: 145 },
+    { labelW: 112, valW: 128 },
   ];
 
   return (
-    <div>
+    <div style={{ width: '100%', minWidth: 0 }}>
       <h2 style={{ fontSize: 22, fontWeight: 700, color: '#141413', marginBottom: 6 }}>
-        Notifikasi
+        Akun Saya
       </h2>
-      <p style={{ fontSize: 13, color: '#696969', marginBottom: 24 }}>
-        Pemberitahuan terkini seputar pesanan dan status konsultasi kuku Anda
+      <p
+        className="whitespace-normal break-words"
+        style={{
+          fontSize: 13,
+          color: '#696969',
+          marginBottom: 24,
+          lineHeight: 1.5,
+          whiteSpace: 'normal',
+          overflowWrap: 'break-word',
+        }}
+      >
+        Informasi profil pribadi dan ID keanggotaan Anda di dinail.co
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {notifs.map((n) => (
-          <div
-            key={n.id}
-            style={{
-              display: 'flex',
-              gap: 16,
-              padding: '18px 0',
-              borderBottom: '1px solid #EAE6E1',
-              alignItems: 'flex-start',
-            }}
+      <AnimatePresence mode="wait">
+        {isLoading ? (
+          <motion.div
+            key="akun-skeleton"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            aria-busy="true"
+            aria-label="Memuat informasi akun"
           >
-            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#F37338', flexShrink: 0, marginTop: 2 }}>
-              {n.icon}
-            </span>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#141413', marginBottom: 4 }}>
-                {n.title}
-              </p>
-              <p style={{ fontSize: 13, color: '#696969', lineHeight: 1.5 }}>
-                {n.desc}
-              </p>
+            {userId && (
+              <div
+                style={{
+                  background: '#FFF7F3',
+                  border: '1.5px solid #FDDCC8',
+                  borderRadius: 14,
+                  padding: '16px 20px',
+                  marginBottom: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  maxWidth: 680,
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <Skeleton style={{ width: 138, height: 11, borderRadius: 5 }} />
+                  <Skeleton style={{ width: 172, height: 18, borderRadius: 6 }} />
+                </div>
+                <Skeleton style={{ width: 144, height: 24, borderRadius: 999 }} />
+              </div>
+            )}
+
+            {/* Flat List Skeleton (5 Baris) */}
+            <div style={{ maxWidth: 680, width: '100%', minWidth: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {skeletonRows.map((row, idx, arr) => (
+                  <div
+                    key={`akun-skel-row-${idx}`}
+                    className="akun-info-row"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '18px 0',
+                      borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #EAE6E1',
+                      gap: 16,
+                    }}
+                  >
+                    <Skeleton style={{ width: row.labelW, height: 14, borderRadius: 6 }} />
+                    <Skeleton style={{ width: row.valW, maxWidth: '100%', height: 16, borderRadius: 6 }} />
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: 28 }}>
+                <Skeleton className="profil-mobile-full-btn" style={{ width: 152, height: 44, borderRadius: 999 }} />
+              </div>
             </div>
-            <span style={{ fontSize: 12, color: '#767676', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {n.time}
-            </span>
-          </div>
-        ))}
-      </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="akun-content"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
+            {userId && (
+              <div
+                style={{
+                  background: '#FFF7F3',
+                  border: '1.5px solid #FDDCC8',
+                  borderRadius: 14,
+                  padding: '16px 20px',
+                  marginBottom: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  maxWidth: 680,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#767676', textTransform: 'uppercase' }}>
+                    ID Pengguna Terdaftar
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
+                    <span
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: '#F37338',
+                        fontFamily: 'monospace',
+                        letterSpacing: '0.04em',
+                        wordBreak: 'break-all',
+                      }}
+                    >
+                      {userId}
+                    </span>
+                    <CopyButton text={userId} />
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: '#F37338',
+                    background: '#FFFFFF',
+                    padding: '4px 12px',
+                    borderRadius: 999,
+                    border: '1px solid #FDDCC8',
+                  }}
+                >
+                  MEMBER TERVERIFIKASI
+                </span>
+              </div>
+            )}
+
+            {/* Flat List Data Profil */}
+            <div style={{ maxWidth: 680, width: '100%', minWidth: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {[
+                  { label: 'ID User', value: userId || 'DNL-USR-8492', isMonospace: true },
+                  { label: 'Nama Lengkap', value: profile.name },
+                  { label: 'Email Terdaftar', value: profile.email, note: 'Email Utama' },
+                  { label: 'Nomor WhatsApp', value: profile.phone || '-' },
+                  { label: 'Kota / Wilayah', value: profile.city || '-' },
+                ].map((item, idx, arr) => (
+                  <div
+                    key={item.label}
+                    className="akun-info-row"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '18px 0',
+                      borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #EAE6E1',
+                      gap: 16,
+                    }}
+                  >
+                    <span className="akun-info-label" style={{ fontSize: 13, color: '#696969', flexShrink: 0 }}>
+                      {item.label}
+                    </span>
+                    <div
+                      className="akun-info-value-wrap"
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'right', minWidth: 0 }}
+                    >
+                      <span
+                        className="akun-info-value"
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: '#141413',
+                          fontFamily: item.isMonospace ? 'monospace' : 'inherit',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {item.value}
+                      </span>
+                      {item.note && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: '#16A34A',
+                            background: '#F0FDF4',
+                            border: '1px solid #BBF7D0',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {item.note}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tombol Ubah Profil langsung di bawah list informasi */}
+              <div style={{ marginTop: 28 }}>
+                <button
+                  className="btn-primary profil-mobile-full-btn"
+                  onClick={onOpenEdit}
+                  style={{
+                    padding: '12px 28px',
+                    fontSize: 14,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <IconEdit size={14} />
+                  <span>Ubah Profil</span>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
+type MobileProfileView = 'hub' | ActiveMenu;
 
 function ProfileContent() {
   const { currentUser, currentRole, userId, logout, openModal } = useRole();
@@ -2899,19 +3053,53 @@ function ProfileContent() {
   const tabParam = searchParams.get('tab');
   const initialDesignParam = searchParams.get('design') || undefined;
 
-  // Tentukan tab awal (default ke 'akun', atau sesuai parameter URL ?tab= atau ?design=)
+  // Tentukan tab awal untuk Desktop (default 'akun', atau sesuai parameter URL ?tab= / ?design=)
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(() => {
     if (tabParam === 'konsultasi' || initialDesignParam) return 'konsultasi';
     if (tabParam === 'ukuran') return 'ukuran';
-    if (tabParam === 'notifikasi') return 'notifikasi';
     return 'akun';
   });
 
-  const [profile, setProfile] = useState<UserProfile>(() => loadProfile(currentUser));
+  // State khusus Mobile Profile Hub (< 1024px)
+  const [mobileView, setMobileView] = useState<MobileProfileView>(() => {
+    if (tabParam === 'konsultasi' || initialDesignParam) return 'konsultasi';
+    if (tabParam === 'ukuran') return 'ukuran';
+    return 'hub';
+  });
+  const [mobileKonsultasiStatus, setMobileKonsultasiStatus] = useState<OrderStatus | 'semua'>('semua');
+  const [mobileOpenKonsultasiForm, setMobileOpenKonsultasiForm] = useState(false);
+  const [mobileOrders, setMobileOrders] = useState<OrderCard[]>([]);
+  const [mobileNailData, setMobileNailData] = useState<NailSizeData | null>(null);
+  const [mobileIdCopied, setMobileIdCopied] = useState(false);
+
+  const [prevUser, setPrevUser] = useState(currentUser);
+  const [profile, setProfile] = useState<UserProfile>({
+    name: currentUser?.name || 'Customer',
+    email: currentUser?.email || '',
+    phone: currentUser?.phone || '',
+    city: 'Yogyakarta',
+  });
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setProfile(loadProfile(currentUser));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [currentUser]);
+
+  // Sinkronisasi ringkasan pesanan & ukuran kuku untuk Mobile Profile Hub
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMobileOrders(loadOrders(userId));
+      setMobileNailData(getSavedNailData());
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [userId, mobileView]);
+
+  if (currentUser !== prevUser) {
+    setPrevUser(currentUser);
     if (currentUser?.name) {
       setProfile((prev) => ({
         ...prev,
@@ -2920,11 +3108,51 @@ function ProfileContent() {
         phone: currentUser.phone || prev.phone,
       }));
     }
-  }, [currentUser]);
+  }
 
   const displayName = currentUser?.name || profile.name || 'Customer';
   const displayInitial = displayName.charAt(0).toUpperCase();
   const photoUrl = currentUser?.photoUrl;
+  const resolvedUserId = userId || 'DNL-USR-8492';
+
+  // Hitung badge status konsultasi untuk Grid 4 Ikon di Mobile Hub
+  const mobileOrderCounts = mobileOrders.reduce(
+    (acc, o) => {
+      const norm = (o.status || '').toLowerCase();
+      if (norm === 'antrian' || norm === 'menunggu' || norm === 'pending') acc.antrian += 1;
+      else if (norm === 'proses' || norm === 'in_progress') acc.disetujui += 1;
+      else if (norm === 'disetujui' || norm === 'siap_checkout' || norm === 'confirmed') acc.checkout += 1;
+      else if (norm === 'selesai' || norm === 'completed') acc.selesai += 1;
+      return acc;
+    },
+    { antrian: 0, disetujui: 0, checkout: 0, selesai: 0 }
+  );
+
+  const handleCopyMobileId = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(resolvedUserId).catch(() => {});
+    }
+    setMobileIdCopied(true);
+    setTimeout(() => setMobileIdCopied(false), 1800);
+  };
+
+  const openMobileKonsultasi = (status: OrderStatus | 'semua', openForm = false) => {
+    setMobileKonsultasiStatus(status);
+    setMobileOpenKonsultasiForm(openForm);
+    setMobileView('konsultasi');
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openMobileSubView = (view: ActiveMenu) => {
+    setMobileView(view);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const mobileSubViewTitle: Record<ActiveMenu, string> = {
+    akun: 'Akun Saya',
+    ukuran: 'Ukuran Kuku Saya',
+    konsultasi: 'Konsultasi Saya',
+  };
 
   const handleSaveProfile = (updated: { name: string; phone: string; city: string }) => {
     const newProfile: UserProfile = {
@@ -2950,14 +3178,67 @@ function ProfileContent() {
     setActiveMenu(key as ActiveMenu);
   };
 
+  const mobileStatusTiles: {
+    label: string;
+    targetStatus: OrderStatus | 'semua';
+    openForm?: boolean;
+    count: number;
+    icon: React.ReactNode;
+  }[] = [
+    {
+      label: 'Antrian',
+      targetStatus: 'menunggu',
+      count: mobileOrderCounts.antrian,
+      icon: (
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#141413" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9.5" />
+          <polyline points="12 7 12 12 15.5 14" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Disetujui',
+      targetStatus: 'proses',
+      count: mobileOrderCounts.disetujui,
+      icon: (
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#141413" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Konsultasi',
+      targetStatus: 'semua',
+      openForm: true,
+      count: mobileOrderCounts.checkout,
+      icon: (
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#141413" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          <line x1="8" y1="9" x2="16" y2="9" />
+          <line x1="8" y1="13" x2="13" y2="13" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Selesai',
+      targetStatus: 'selesai',
+      count: mobileOrderCounts.selesai,
+      icon: (
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#141413" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+      ),
+    },
+  ];
+
   return (
-    <div style={{ background: '#F3F0EE', minHeight: '100vh' }}>
+    <div style={{ background: '#F3F0EE', minHeight: '100vh', overflowX: 'clip' }}>
       <Navbar />
 
-      <main style={{ maxWidth: 1180, margin: '0 auto', padding: '120px 20px 80px' }}>
-
-        {/* State: Belum Login */}
-        {!currentUser && (
+      {/* State: Belum Login (Desktop & Mobile) */}
+      {!currentUser && (
+        <main className="profil-main-container" style={{ maxWidth: 1180, margin: '0 auto', padding: '120px 20px 80px' }}>
           <div
             style={{
               textAlign: 'center',
@@ -2986,10 +3267,600 @@ function ProfileContent() {
               Masuk / Daftar Sekarang →
             </button>
           </div>
-        )}
+        </main>
+      )}
 
-        {/* State: Sudah Login (Layout 2 Kolom) */}
-        {currentUser && (
+      {/* State: Sudah Login — MOBILE PROFILE HUB & SUB-PAGES (< 1024px) */}
+      {currentUser && (
+        <div className="block lg:hidden profil-mobile-hub-wrapper">
+          <AnimatePresence mode="wait">
+            {mobileView === 'hub' ? (
+              <motion.div
+                key="mobile-profile-hub"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+              >
+                {/* 1. Header Banner Profil (Gradasi Signal Orange dinail.co — Rata Tepi ala Shopee) */}
+                <div
+                  style={{
+                    width: '100%',
+                    marginTop: 68,
+                    background: 'linear-gradient(135deg, #F37338 0%, #DF5E24 100%)',
+                    color: '#FFFFFF',
+                    padding: '18px 16px',
+                    borderRadius: 0,
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    {/* Kiri: Avatar + Nama + Pill ID */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+                      {photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={photoUrl}
+                          alt={displayName}
+                          style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            flexShrink: 0,
+                            backgroundColor: '#FFFFFF',
+                            boxShadow: '0 0 0 2px rgba(255, 255, 255, 0.4)',
+                          }}
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: '50%',
+                            backgroundColor: '#FFFFFF',
+                            color: '#F37338',
+                            fontSize: 19,
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            boxShadow: '0 0 0 2px rgba(255, 255, 255, 0.4)',
+                          }}
+                        >
+                          {displayInitial}
+                        </div>
+                      )}
+
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <p
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 600,
+                            color: '#FFFFFF',
+                            lineHeight: 1.25,
+                            margin: 0,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {displayName}
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={handleCopyMobileId}
+                          title="Ketuk untuk menyalin ID User"
+                          style={{
+                            marginTop: 4,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            backgroundColor: 'rgba(0, 0, 0, 0.15)',
+                            color: 'rgba(255, 255, 255, 0.95)',
+                            border: 'none',
+                            borderRadius: 999,
+                            padding: '2px 10px',
+                            fontSize: 11,
+                            fontWeight: 500,
+                            fontFamily: 'monospace',
+                            letterSpacing: '0.02em',
+                            cursor: 'pointer',
+                            maxWidth: '100%',
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {mobileIdCopied ? 'ID Tersalin' : `ID: ${resolvedUserId}`}
+                          </span>
+                          <svg
+                            width="11"
+                            height="11"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            style={{ flexShrink: 0, opacity: 0.9 }}
+                            aria-hidden="true"
+                          >
+                            {mobileIdCopied ? (
+                              <polyline points="20 6 9 17 4 12" />
+                            ) : (
+                              <>
+                                <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                              </>
+                            )}
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Kanan: Ikon Edit Putih Polos (Tanpa Border Lingkaran) */}
+                    <button
+                      type="button"
+                      onClick={() => setIsEditProfileOpen(true)}
+                      aria-label="Ubah Profil"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 6,
+                        color: 'rgba(255, 255, 255, 0.9)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        transition: 'color 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#FFFFFF';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = 'rgba(255, 255, 255, 0.9)';
+                      }}
+                    >
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Banner Pengingat Ukuran Kuku (Hanya jika ukuran kuku belum disimpan) */}
+                {!mobileNailData && (
+                  <div
+                    style={{
+                      margin: '12px 16px 0',
+                      padding: '12px 14px',
+                      borderRadius: 16,
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #EAE6E1',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      <span
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: '50%',
+                          backgroundColor: '#F37338',
+                          flexShrink: 0,
+                        }}
+                        aria-hidden="true"
+                      />
+                      <span style={{ fontSize: 12.5, color: '#141413', fontWeight: 500 }}>
+                        Ukuran kuku belum diatur.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openMobileSubView('ukuran')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        color: '#F37338',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        fontFamily: 'inherit',
+                        flexShrink: 0,
+                      }}
+                    >
+                      Atur Sekarang →
+                    </button>
+                  </div>
+                )}
+
+                {/* 3. Kartu "Konsultasi Saya" — Grid 4 Ikon Status */}
+                <div
+                  style={{
+                    margin: '12px 16px 0',
+                    padding: '16px',
+                    borderRadius: 16,
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #EAE6E1',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    <h2 style={{ fontSize: 14, fontWeight: 600, color: '#141413', margin: 0 }}>
+                      Konsultasi Saya
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => openMobileKonsultasi('semua', false)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: '#6B6B6B',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      <span>Lihat Riwayat</span>
+                      <span aria-hidden="true">›</span>
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                      gap: 8,
+                      marginTop: 14,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {mobileStatusTiles.map((tile) => (
+                      <button
+                        key={tile.label}
+                        type="button"
+                        onClick={() => openMobileKonsultasi(tile.targetStatus, Boolean(tile.openForm))}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: '2px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 6,
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        <div
+                          style={{
+                            position: 'relative',
+                            width: 42,
+                            height: 42,
+                            borderRadius: 12,
+                            backgroundColor: '#FAF7F5',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {tile.icon}
+                          {tile.count > 0 && (
+                            <span
+                              style={{
+                                position: 'absolute',
+                                top: -5,
+                                right: -5,
+                                minWidth: 18,
+                                height: 18,
+                                padding: '0 5px',
+                                borderRadius: 999,
+                                backgroundColor: '#F37338',
+                                color: '#FFFFFF',
+                                fontSize: 10,
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: '1.5px solid #FFFFFF',
+                                lineHeight: 1,
+                              }}
+                            >
+                              {tile.count}
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: '#141413', lineHeight: 1.2 }}>
+                          {tile.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 4. Kartu Daftar Menu Profil */}
+                <div
+                  style={{
+                    margin: '12px 16px 24px',
+                    padding: '4px 16px',
+                    borderRadius: 16,
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #EAE6E1',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Baris 1: Ukuran Kuku Saya */}
+                  <button
+                    type="button"
+                    onClick={() => openMobileSubView('ukuran')}
+                    style={{
+                      width: '100%',
+                      padding: '14px 0',
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: '1px solid #EAE6E1',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12, color: '#141413', fontSize: 14, fontWeight: 500 }}>
+                      <span style={{ color: '#141413', display: 'inline-flex' }}>
+                        <IconRuler size={18} />
+                      </span>
+                      <span>Ukuran Kuku Saya</span>
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: '#F37338' }}>
+                      <span>
+                        {mobileNailData
+                          ? mobileNailData.preset === 'Custom'
+                            ? 'Kustom'
+                            : `Size ${mobileNailData.preset}`
+                          : 'Atur Ukuran'}
+                      </span>
+                      <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>›</span>
+                    </span>
+                  </button>
+
+                  {/* Baris 2: Akun Saya */}
+                  <button
+                    type="button"
+                    onClick={() => openMobileSubView('akun')}
+                    style={{
+                      width: '100%',
+                      padding: '14px 0',
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: '1px solid #EAE6E1',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12, color: '#141413', fontSize: 14, fontWeight: 500 }}>
+                      <span style={{ color: '#141413', display: 'inline-flex' }}>
+                        <IconUser size={18} />
+                      </span>
+                      <span>Akun Saya</span>
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#6B6B6B' }}>
+                      <span>Detail Profil</span>
+                      <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>›</span>
+                    </span>
+                  </button>
+
+                  {/* Tautan Dashboard Khusus Role Admin/Owner */}
+                  {(currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner') && (
+                    <Link
+                      href="/admin"
+                      style={{
+                        width: '100%',
+                        padding: '14px 0',
+                        borderBottom: '1px solid #EAE6E1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        textDecoration: 'none',
+                        color: '#F37338',
+                        fontSize: 14,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span>Dashboard Admin</span>
+                      <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>›</span>
+                    </Link>
+                  )}
+
+                  {(currentRole === 'owner' || currentUser?.role === 'owner') && (
+                    <Link
+                      href="/owner"
+                      style={{
+                        width: '100%',
+                        padding: '14px 0',
+                        borderBottom: '1px solid #EAE6E1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        textDecoration: 'none',
+                        color: '#F37338',
+                        fontSize: 14,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span>Dashboard Owner</span>
+                      <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>›</span>
+                    </Link>
+                  )}
+
+                  {/* Baris 4: Keluar */}
+                  <button
+                    type="button"
+                    onClick={logout}
+                    style={{
+                      width: '100%',
+                      padding: '14px 0',
+                      background: 'transparent',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      color: '#B91C1C',
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12, fontSize: 14, fontWeight: 500 }}>
+                      <span style={{ display: 'inline-flex' }}>
+                        <IconLogOut size={18} />
+                      </span>
+                      <span>Keluar</span>
+                    </span>
+                  </button>
+                </div>
+              </motion.div>
+            ) : (
+              /* MODE 2: Tampilan Sub-Halaman Detail (akun | ukuran | konsultasi) */
+              <motion.div
+                key={`mobile-profile-sub-${mobileView}`}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
+              >
+                {/* Bar Kembali di Atas */}
+                <div
+                  style={{
+                    padding: '84px 16px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileView('hub');
+                      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: '#FFFFFF',
+                      border: '1px solid #EAE6E1',
+                      borderRadius: 999,
+                      padding: '7px 14px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: '#141413',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <span aria-hidden="true">←</span>
+                    <span>Kembali</span>
+                  </button>
+
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#6B6B6B', letterSpacing: '0.02em' }}>
+                    {mobileSubViewTitle[mobileView]}
+                  </span>
+                </div>
+
+                {/* Konten Sub-Halaman Detail */}
+                <div style={{ padding: '0 16px 48px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+                  <div
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #EAE6E1',
+                      borderRadius: 18,
+                      padding: '20px 16px',
+                      width: '100%',
+                      maxWidth: '100%',
+                      minWidth: 0,
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    {mobileView === 'akun' && (
+                      <AkunTab
+                        profile={profile}
+                        userId={userId}
+                        onOpenEdit={() => setIsEditProfileOpen(true)}
+                      />
+                    )}
+                    {mobileView === 'ukuran' && <UkuranKukuTab />}
+                    {mobileView === 'konsultasi' && (
+                      <KonsultasiTab
+                        key={`mobile-kns-${userId || 'guest'}-${profile.name}-${mobileKonsultasiStatus}-${mobileOpenKonsultasiForm}`}
+                        userId={userId}
+                        userProfileName={profile.name}
+                        initialDesign={initialDesignParam}
+                        initialStatus={mobileKonsultasiStatus}
+                        initialOpenForm={mobileOpenKonsultasiForm}
+                        onNavigateToUkuran={() => openMobileSubView('ukuran')}
+                      />
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* State: Sudah Login — DESKTOP 2-COLUMN LAYOUT (>= 1024px, 100% UTUH) */}
+      {currentUser && (
+        <main
+          className="hidden lg:block profil-desktop-wrapper"
+          style={{ maxWidth: 1180, margin: '0 auto', padding: '120px 20px 80px' }}
+        >
           <div className="profil-layout">
 
             {/* ── 1. SIDEBAR KIRI (~240px–260px di Desktop) ── */}
@@ -3076,22 +3947,26 @@ function ProfileContent() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    marginBottom: 20,
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    marginBottom: 16,
                     background: '#FFF7F3',
                     border: '1px solid #FDDCC8',
                     borderRadius: 8,
                     padding: '7px 10px',
                     fontSize: 12,
+                    minWidth: 0,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ color: '#767676', fontWeight: 500 }}>ID:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                    <span style={{ color: '#767676', fontWeight: 500, flexShrink: 0 }}>ID:</span>
                     <span
                       style={{
                         fontWeight: 700,
                         color: '#F37338',
                         fontFamily: 'monospace',
                         letterSpacing: '0.02em',
+                        wordBreak: 'break-all',
                       }}
                     >
                       {userId}
@@ -3102,9 +3977,9 @@ function ProfileContent() {
               )}
 
               {/* Garis Pembatas Tipis (1px solid #EAE6E1) */}
-              <div style={{ height: 1, background: '#EAE6E1', marginBottom: 18 }} />
+              <div style={{ height: 1, background: '#EAE6E1', marginBottom: 14 }} />
 
-              {/* Menu Navigasi Vertikal: Akun Saya -> Ukuran Kuku Saya -> Konsultasi Saya -> Notifikasi -> Keluar */}
+              {/* Menu Navigasi Vertikal: Akun Saya -> Ukuran Kuku Saya -> Konsultasi Saya -> Keluar */}
               <nav className="profil-nav-menu">
                 {MENU_ITEMS.map((item) => {
                   const isActive = activeMenu === item.key;
@@ -3137,7 +4012,7 @@ function ProfileContent() {
                       </span>
                       <span>{item.label}</span>
                       {isActive && !isLogout && (
-                        <span style={{ marginLeft: 'auto', color: '#F37338', fontSize: 12, fontWeight: 700 }}>
+                        <span className="profil-nav-chevron" style={{ marginLeft: 'auto', color: '#F37338', fontSize: 12, fontWeight: 700 }}>
                           ›
                         </span>
                       )}
@@ -3146,10 +4021,18 @@ function ProfileContent() {
                 })}
               </nav>
 
-              {/* Quick links ke Catalog & Price List */}
-              <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid #EAE6E1' }}>
+              {/* Quick links ke Catalog & Price List (disembunyikan di mobile < 1024px) */}
+              <div
+                className={
+                  currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner'
+                    ? 'profil-quicklinks-box'
+                    : 'profil-quicklinks-box profil-quicklinks-desktop-only'
+                }
+                style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid #EAE6E1' }}
+              >
                 <Link
                   href="/catalog"
+                  className="hidden lg:block profil-desktop-only-link"
                   style={{
                     display: 'block',
                     fontSize: 13,
@@ -3163,6 +4046,7 @@ function ProfileContent() {
                 </Link>
                 <Link
                   href="/pricelist"
+                  className="hidden lg:block profil-desktop-only-link"
                   style={{
                     display: 'block',
                     fontSize: 13,
@@ -3190,6 +4074,22 @@ function ProfileContent() {
                     → Dashboard Admin
                   </Link>
                 )}
+                {(currentRole === 'owner' || currentUser?.role === 'owner') && (
+                  <Link
+                    href="/owner"
+                    style={{
+                      display: 'block',
+                      fontSize: 13,
+                      color: '#F37338',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                      padding: '5px 0',
+                      transition: 'opacity 0.2s',
+                    }}
+                  >
+                    → Dashboard Owner
+                  </Link>
+                )}
               </div>
             </aside>
 
@@ -3214,51 +4114,47 @@ function ProfileContent() {
                   onNavigateToUkuran={() => setActiveMenu('ukuran')}
                 />
               )}
-              {activeMenu === 'notifikasi' && (
-                <NotifikasiTab />
-              )}
             </section>
 
           </div>
-        )}
+        </main>
+      )}
 
-        {/* Modal Ubah Profil dengan Dialog Konfirmasi */}
-        <EditProfileModal
-          key={`${isEditProfileOpen}-${profile.name}-${profile.phone}-${profile.city}`}
-          isOpen={isEditProfileOpen}
-          profile={profile}
-          onClose={() => setIsEditProfileOpen(false)}
-          onSave={handleSaveProfile}
-        />
+      {/* Modal Ubah Profil dengan Dialog Konfirmasi */}
+      <EditProfileModal
+        key={`${isEditProfileOpen}-${profile.name}-${profile.phone}-${profile.city}`}
+        isOpen={isEditProfileOpen}
+        profile={profile}
+        onClose={() => setIsEditProfileOpen(false)}
+        onSave={handleSaveProfile}
+      />
 
-        {/* Notifikasi Toast Berhasil */}
-        {toastMessage && (
-          <div
-            style={{
-              position: 'fixed',
-              bottom: 24,
-              right: 24,
-              zIndex: 10003,
-              background: '#141413',
-              color: '#FFFFFF',
-              padding: '12px 20px',
-              borderRadius: 12,
-              boxShadow: '0 8px 24px rgba(20, 20, 19, 0.25)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            <span>{toastMessage}</span>
-          </div>
-        )}
-
-      </main>
+      {/* Notifikasi Toast Berhasil */}
+      {toastMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            zIndex: 10003,
+            background: '#141413',
+            color: '#FFFFFF',
+            padding: '12px 20px',
+            borderRadius: 12,
+            boxShadow: '0 8px 24px rgba(20, 20, 19, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
       <Footer />
     </div>

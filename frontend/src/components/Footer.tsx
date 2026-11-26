@@ -178,6 +178,7 @@ export default function Footer() {
 
   return (
     <footer
+      className="site-footer"
       style={{
         backgroundColor: '#141413',
         color: '#FFFFFF',
@@ -206,6 +207,7 @@ export default function Footer() {
 
         {/* 2. 4-Column Navigation Grid */}
         <div
+          className="footer-columns-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
@@ -339,6 +341,7 @@ export default function Footer() {
 
         {/* 4. Bottom Bar */}
         <div
+          className="footer-bottom-bar"
           style={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -349,6 +352,7 @@ export default function Footer() {
         >
           {/* Sisi Kiri: Copyright + Dot-Separated Links */}
           <div
+            className="footer-bottom-left"
             style={{
               display: 'flex',
               flexWrap: 'wrap',
@@ -425,11 +429,27 @@ export default function Footer() {
               >
                 Panel Admin
               </Link>
+              <span aria-hidden="true" style={{ opacity: 0.7 }}>
+                ·
+              </span>
+              <Link
+                href="/owner"
+                style={{ color: '#F37338', textDecoration: 'none', fontWeight: 600, transition: 'opacity 0.2s' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.75';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                }}
+              >
+                Owner Panel
+              </Link>
             </div>
           </div>
 
           {/* Sisi Kanan: Locale Pill Selector + 4 Solid White Social SVG Icons */}
           <div
+            className="footer-bottom-right"
             style={{
               display: 'flex',
               flexWrap: 'wrap',

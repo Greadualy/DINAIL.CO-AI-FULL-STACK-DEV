@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'motion/react';
 import { useRole } from '@/context/RoleContext';
 import { DINAIL_ASSETS } from '@/constants/assets';
 
@@ -11,10 +12,12 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isClicked, setIsClicked] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { currentUser, openModal } = useRole();
   const navRef = useRef<HTMLElement>(null);
+  const mobileNavRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -33,16 +36,32 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Click outside to collapse if opened via click
+  // Click / touch outside to collapse desktop pill or close mobile dropdown
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+    const handlePointerOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (navRef.current && !navRef.current.contains(target)) {
         setIsClicked(false);
         setIsHovered(false);
       }
+      if (mobileNavRef.current && !mobileNavRef.current.contains(target)) {
+        setIsMobileMenuOpen(false);
+      }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMobileMenuOpen(false);
+        setIsClicked(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerOutside);
+    document.addEventListener('touchstart', handlePointerOutside, { passive: true });
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerOutside);
+      document.removeEventListener('touchstart', handlePointerOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   // Compute collapsed vs expanded state
@@ -73,6 +92,7 @@ export default function Navbar() {
     e.preventDefault();
     e.stopPropagation();
     setIsClicked(false);
+    setIsMobileMenuOpen(false);
     if (currentUser) {
       router.push('/profil');
     } else {
@@ -87,9 +107,11 @@ export default function Navbar() {
 
   return (
     <>
-      {/* 4.1. Dynamic Floating Pill Navbar */}
+      {/* 4.1. Dynamic Floating Pill Navbar (Desktop >= 768px) */}
       <nav
         ref={navRef}
+        className="floating-pill-nav desktop-floating-nav"
+        data-collapsed={isCollapsed ? 'true' : 'false'}
         onClick={handleNavClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -162,7 +184,7 @@ export default function Navbar() {
               alt="Logo dinail.co"
               width={36}
               height={36}
-              priority
+              preload
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           </div>
@@ -188,6 +210,7 @@ export default function Navbar() {
 
         {/* Item Navigasi: 1. Home, 2. Catalog, 3. Price List, 4. Profil */}
         <div
+          className="floating-pill-nav-links"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -238,106 +261,281 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* Mobile Bottom Nav (Khusus Layar HP <= 640px) */}
-      <div
-        className="mobile-bottom-nav"
-        style={{
-          display: 'none',
-          position: 'fixed',
-          bottom: 16,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 999,
-          backgroundColor: '#141413',
-          borderRadius: 999,
-          padding: '8px 16px',
-          boxShadow: '0px 8px 32px rgba(0,0,0,0.25)',
-          gap: 6,
-        }}
-      >
-        {[
-          {
-            label: 'Home',
-            href: '/',
-            icon: (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-            ),
-          },
-          {
-            label: 'Catalog',
-            href: '/catalog',
-            icon: (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="7" height="7" x="3" y="3" rx="1" />
-                <rect width="7" height="7" x="14" y="3" rx="1" />
-                <rect width="7" height="7" x="14" y="14" rx="1" />
-                <rect width="7" height="7" x="3" y="14" rx="1" />
-              </svg>
-            ),
-          },
-          {
-            label: 'Price List',
-            href: '/pricelist',
-            icon: (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-                <line x1="7" y1="7" x2="7.01" y2="7" />
-              </svg>
-            ),
-          },
-          {
-            label: 'Profil',
-            href: '#',
-            icon: (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            ),
-            isProfile: true,
-          },
-        ].map((item) => (
-          <button
-            key={item.label}
-            onClick={(e) => {
-              if (item.isProfile) {
-                handleProfileClick(e);
-              } else {
-                router.push(item.href);
-              }
-            }}
+      {/* Mobile Full-Width Glassmorphism Top Navbar + Dropdown (< 768px) */}
+      <div ref={mobileNavRef} className="mobile-top-nav-wrapper">
+        {/* 1. Bar Atas (Fixed Full-Width Top Bar) */}
+        <header
+          aria-label="Navigasi mobile dinail.co"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            width: '100%',
+            height: 68,
+            padding: '0 20px',
+            boxSizing: 'border-box',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: 'rgba(252, 251, 250, 0.68)',
+            backdropFilter: 'blur(16px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+            borderBottom: '1px solid rgba(20, 20, 19, 0.08)',
+            boxShadow: '0px 4px 20px rgba(20, 20, 19, 0.04)',
+          }}
+        >
+          {/* Sisi Kiri: Logo Bulat + Brand dinail.co */}
+          <Link
+            href="/"
+            onClick={() => setIsMobileMenuOpen(false)}
             style={{
-              background: 'none',
-              border: 'none',
               display: 'inline-flex',
-              flexDirection: 'column',
               alignItems: 'center',
-              gap: 2,
-              color: isActive(item.href) ? '#F37338' : 'rgba(255,255,255,0.7)',
-              fontSize: 11,
-              fontWeight: 600,
-              padding: '4px 12px',
-              cursor: 'pointer',
+              gap: 10,
+              textDecoration: 'none',
+              flexShrink: 0,
             }}
           >
-            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-              {item.icon}
+            <span
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                flexShrink: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Image
+                src={DINAIL_ASSETS.logo}
+                alt="Logo dinail.co"
+                width={34}
+                height={34}
+                preload
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             </span>
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </div>
+            <span
+              style={{
+                fontWeight: 600,
+                fontSize: 16,
+                letterSpacing: '-0.02em',
+                color: '#141413',
+                lineHeight: 1,
+              }}
+            >
+              dinail.co
+            </span>
+          </Link>
 
-      <style>{`
-        @media (max-width: 640px) {
-          .mobile-bottom-nav {
-            display: flex !important;
-          }
-        }
-      `}</style>
+          {/* Sisi Kanan: Tombol Pill Cepat + Hamburger Menu */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              type="button"
+              onClick={handleProfileClick}
+              style={{
+                borderRadius: 999,
+                padding: '8px 18px',
+                backgroundColor: '#141413',
+                color: '#FFFFFF',
+                fontSize: 13,
+                fontWeight: 600,
+                lineHeight: 1.2,
+                letterSpacing: '-0.01em',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Profil
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+              aria-expanded={isMobileMenuOpen}
+              aria-label={isMobileMenuOpen ? 'Tutup menu navigasi' : 'Buka menu navigasi'}
+              style={{
+                width: 40,
+                height: 40,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: isMobileMenuOpen ? '1.5px solid #141413' : '1.5px solid transparent',
+                borderRadius: 12,
+                padding: 6,
+                backgroundColor: isMobileMenuOpen ? 'rgba(255, 255, 255, 0.4)' : 'transparent',
+                color: '#141413',
+                cursor: 'pointer',
+                transition: 'border-color 0.2s ease, background-color 0.2s ease',
+              }}
+            >
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#141413"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        {/* 2. Panel Dropdown Menu (Glassmorphism) */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <>
+              {/* Area klik/sentuh di luar dropdown untuk menutup menu */}
+              <motion.div
+                key="mobile-nav-dismiss-layer"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setIsMobileMenuOpen(false)}
+                aria-hidden="true"
+                style={{
+                  position: 'fixed',
+                  top: 68,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 998,
+                  backgroundColor: 'rgba(20, 20, 19, 0.14)',
+                }}
+              />
+
+              <motion.nav
+                key="mobile-nav-dropdown"
+                aria-label="Menu navigasi mobile"
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                style={{
+                  position: 'fixed',
+                  top: 68,
+                  left: 0,
+                  right: 0,
+                  width: '100%',
+                  zIndex: 999,
+                  backgroundColor: 'rgba(252, 251, 250, 0.82)',
+                  backdropFilter: 'blur(20px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                  borderBottom: '1px solid rgba(20, 20, 19, 0.1)',
+                  boxShadow: '0px 16px 32px rgba(20, 20, 19, 0.08)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <Link
+                  href="/"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '18px 24px',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    textDecoration: 'none',
+                    color: isActive('/') ? '#F37338' : '#141413',
+                    borderBottom: '1px solid rgba(20, 20, 19, 0.08)',
+                  }}
+                >
+                  HOME
+                </Link>
+
+                <Link
+                  href="/catalog"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '18px 24px',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    textDecoration: 'none',
+                    color: isActive('/catalog') ? '#F37338' : '#141413',
+                    borderBottom: '1px solid rgba(20, 20, 19, 0.08)',
+                  }}
+                >
+                  CATALOG
+                </Link>
+
+                <Link
+                  href="/pricelist"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '18px 24px',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    textDecoration: 'none',
+                    color: isActive('/pricelist') ? '#F37338' : '#141413',
+                    borderBottom: '1px solid rgba(20, 20, 19, 0.08)',
+                  }}
+                >
+                  PRICE LIST
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={handleProfileClick}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid rgba(20, 20, 19, 0.08)',
+                    padding: '18px 24px',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    color: isActive('/profil') ? '#F37338' : '#141413',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  PROFIL
+                </button>
+
+                {/* Garis aksen penutup tipis di paling bawah panel */}
+                <div
+                  aria-hidden="true"
+                  style={{
+                    height: 3,
+                    backgroundColor: 'rgba(20, 20, 19, 0.18)',
+                    borderRadius: 999,
+                    margin: '12px 24px 16px',
+                  }}
+                />
+              </motion.nav>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
     </>
   );
 }

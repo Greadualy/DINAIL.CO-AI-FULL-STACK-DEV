@@ -7,7 +7,7 @@ import Footer from "@/components/Footer";
 
 export default function HomePage() {
   return (
-    <main style={{ backgroundColor: "#F3F0EE", minHeight: "100vh" }}>
+    <main style={{ backgroundColor: "#F3F0EE", minHeight: "100vh", overflowX: "clip" }}>
       <Navbar />
       <HeroSection />
       <OrderSteps />

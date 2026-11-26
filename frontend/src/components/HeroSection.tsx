@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRole } from '@/context/RoleContext';
 import { DINAIL_ASSETS } from '@/constants/assets';
+import RevealTitle from '@/components/RevealTitle';
 
 export default function HeroSection() {
   const { openModal } = useRole();
@@ -15,6 +16,7 @@ export default function HeroSection() {
   return (
     <section
       id="home"
+      className="hero-section"
       style={{
         backgroundColor: '#F3F0EE',
         paddingTop: 'clamp(120px, 11vw, 150px)',
@@ -25,7 +27,20 @@ export default function HeroSection() {
         overflow: 'hidden',
       }}
     >
-      <div className="hero-split-container" style={{ maxWidth: 1240, margin: '0 auto' }}>
+      {/* Mobile-only Background Layer (< 1024px) */}
+      <div className="hero-mobile-bg" aria-hidden="true">
+        <Image
+          src={DINAIL_ASSETS.heroNailArt}
+          alt=""
+          fill
+          preload
+          sizes="100vw"
+          style={{ objectFit: 'cover', objectPosition: 'center', zIndex: 0 }}
+        />
+        <div className="hero-mobile-bg-overlay" />
+      </div>
+
+      <div className="hero-split-container" style={{ maxWidth: 1240, margin: '0 auto', position: 'relative', zIndex: 2 }}>
         {/* Left Column: Text & CTA Content */}
         <div style={{ position: 'relative', zIndex: 2 }}>
           {/* Eyebrow */}
@@ -58,7 +73,10 @@ export default function HeroSection() {
           </p>
 
           {/* Headline */}
-          <h1
+          <RevealTitle
+            as="h1"
+            className="hero-headline"
+            text="Karya Nail Art Presisi yang Didesain Khusus untuk Jari Kamu."
             style={{
               fontSize: 'clamp(34px, 4.4vw, 56px)',
               fontWeight: 500,
@@ -68,9 +86,7 @@ export default function HeroSection() {
               marginBottom: 20,
               maxWidth: 580,
             }}
-          >
-            Karya Nail Art Presisi yang Didesain Khusus untuk Jari Kamu.
-          </h1>
+          />
 
           {/* Description */}
           <p
@@ -110,7 +126,7 @@ export default function HeroSection() {
             </button>
             <Link
               href="/catalog"
-              className="btn-secondary"
+              className="btn-secondary hero-btn-secondary"
               style={{
                 padding: '12px 28px',
                 fontSize: 16,
@@ -146,7 +162,7 @@ export default function HeroSection() {
             alt="Showcase karya nail art dinail.co"
             fill
             style={{ objectFit: 'cover', objectPosition: 'center' }}
-            priority
+            preload
             sizes="(max-width: 1023px) 100vw, 50vw"
           />
         </div>

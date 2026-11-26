@@ -1,5 +1,8 @@
 'use client';
 
+import { motion } from 'motion/react';
+import RevealTitle from '@/components/RevealTitle';
+
 export default function LocationSection() {
   const iconBadgeStyle: React.CSSProperties = {
     width: '44px',
@@ -26,16 +29,24 @@ export default function LocationSection() {
       }}
     >
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{
-          backgroundColor: '#FCFBFA',
-          borderRadius: 40,
-          padding: 'clamp(32px, 5vw, 56px)',
-          boxShadow: '0px 24px 48px 0px rgba(0,0,0,0.08)',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          gap: 48,
-          alignItems: 'start',
-        }}>
+        <motion.div
+          className="location-card-grid"
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          whileHover={{ y: -4, transition: { duration: 0.25, ease: 'easeOut' } }}
+          style={{
+            backgroundColor: '#FCFBFA',
+            borderRadius: 40,
+            padding: 'clamp(32px, 5vw, 56px)',
+            boxShadow: '0px 24px 48px 0px rgba(0,0,0,0.08)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: 48,
+            alignItems: 'start',
+          }}
+        >
           {/* Info Column */}
           <div>
             <p style={{
@@ -63,16 +74,18 @@ export default function LocationSection() {
               />
               STUDIO &amp; WORKSHOP
             </p>
-            <h2 style={{
-              fontSize: 'clamp(26px, 3.5vw, 36px)',
-              fontWeight: 500,
-              letterSpacing: '-0.03em',
-              color: '#141413',
-              lineHeight: 1.05,
-              marginBottom: 32,
-            }}>
-              Lokasi dinail.co
-            </h2>
+            <RevealTitle
+              as="h2"
+              text="Lokasi dinail.co"
+              style={{
+                fontSize: 'clamp(26px, 3.5vw, 36px)',
+                fontWeight: 500,
+                letterSpacing: '-0.03em',
+                color: '#141413',
+                lineHeight: 1.05,
+                marginBottom: 32,
+              }}
+            />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
               {/* Address */}
@@ -194,13 +207,16 @@ export default function LocationSection() {
           </div>
 
           {/* Map Column */}
-          <div style={{
-            borderRadius: 32,
-            overflow: 'hidden',
-            height: 'clamp(280px, 35vw, 420px)',
-            backgroundColor: '#E8E2DA',
-            position: 'relative',
-          }}>
+          <div
+            className="location-map-box"
+            style={{
+              borderRadius: 32,
+              overflow: 'hidden',
+              height: 'clamp(280px, 35vw, 420px)',
+              backgroundColor: '#E8E2DA',
+              position: 'relative',
+            }}
+          >
             {/* Embedded Google Maps iframe placeholder */}
             <iframe
               src="https://www.google.com/maps?q=-7.654784,110.3491832&output=embed"
@@ -213,7 +229,7 @@ export default function LocationSection() {
               title="Lokasi Studio dinail.co"
             />
           </div>
-        </div>
+        </motion.div>
       </div>
     </section>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { testimonials as INITIAL_TESTIMONIALS, type TestimonialItem } from '@/data/mockData';
+import RevealTitle from '@/components/RevealTitle';
 
 function StarRating({
   count,
@@ -129,9 +130,21 @@ export default function TestimonialCarousel() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [fullReviewItem, setFullReviewItem] = useState<TestimonialItem | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const total = displayItems.length;
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const update = () => setIsMobile(mq.matches);
+    const timer = setTimeout(update, 0);
+    mq.addEventListener('change', update);
+    return () => {
+      clearTimeout(timer);
+      mq.removeEventListener('change', update);
+    };
+  }, []);
 
   // Autoplay handler
   useEffect(() => {
@@ -163,10 +176,11 @@ export default function TestimonialCarousel() {
     const absOffset = Math.abs(offset);
     const sign = offset < 0 ? -1 : 1;
 
-    let transform = `perspective(1100px) translate3d(calc(-50% + ${sign * 600}px), -50%, 0) scale(0.65) rotateY(${sign * -20}deg)`;
+    let transform = `perspective(1100px) translate3d(calc(-50% + ${sign * (isMobile ? 280 : 600)}px), -50%, 0) scale(0.65) rotateY(${sign * -20}deg)`;
     let zIndex = 1;
     let opacity = 0;
     let pointerEvents: React.CSSProperties['pointerEvents'] = 'none';
+    let visibility: React.CSSProperties['visibility'] = 'visible';
 
     if (offset === 0) {
       transform = 'perspective(1100px) translate3d(-50%, -50%, 0) scale(1) rotateY(0deg)';
@@ -174,15 +188,20 @@ export default function TestimonialCarousel() {
       opacity = 1;
       pointerEvents = 'auto';
     } else if (absOffset === 1) {
-      transform = `perspective(1100px) translate3d(calc(-50% + ${sign * 260}px), -50%, 0) scale(0.88) rotateY(${sign * -10}deg)`;
+      const sideShift = isMobile ? 190 : 260;
+      transform = `perspective(1100px) translate3d(calc(-50% + ${sign * sideShift}px), -50%, 0) scale(${isMobile ? 0.84 : 0.88}) rotateY(${sign * -10}deg)`;
       zIndex = 20;
-      opacity = 0.85;
+      opacity = isMobile ? 0.35 : 0.85;
       pointerEvents = 'auto';
-    } else if (absOffset === 2) {
+    } else if (absOffset === 2 && !isMobile) {
       transform = `perspective(1100px) translate3d(calc(-50% + ${sign * 480}px), -50%, 0) scale(0.76) rotateY(${sign * -16}deg)`;
       zIndex = 10;
       opacity = 0.4;
       pointerEvents = 'auto';
+    } else if (isMobile && absOffset >= 2) {
+      opacity = 0;
+      pointerEvents = 'none';
+      visibility = 'hidden';
     }
 
     // Kartu jauh di luar layar (absOffset >= 4) berpindah diam-diam tanpa melintas visual
@@ -195,11 +214,12 @@ export default function TestimonialCarousel() {
       position: 'absolute',
       left: '50%',
       top: '50%',
-      width: '340px',
+      width: isMobile ? 'min(320px, 86vw)' : '340px',
       maxWidth: '86vw',
       transform,
       zIndex,
       opacity,
+      visibility,
       pointerEvents,
       cursor: offset === 0 ? 'default' : 'pointer',
       transition,
@@ -263,7 +283,9 @@ export default function TestimonialCarousel() {
             />
             PENILAIAN &amp; CERITA PELANGGAN
           </p>
-          <h2
+          <RevealTitle
+            as="h2"
+            text="Kuku Sempurna, Hati Bahagia."
             style={{
               fontSize: 'clamp(28px, 4.5vw, 42px)',
               fontWeight: 500,
@@ -273,9 +295,7 @@ export default function TestimonialCarousel() {
               maxWidth: 680,
               marginBottom: 16,
             }}
-          >
-            Kuku Sempurna, Hati Bahagia.
-          </h2>
+          />
           <p
             style={{
               fontSize: 16,
@@ -516,11 +536,14 @@ export default function TestimonialCarousel() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
+            className="dinail-modal-card"
             style={{
               backgroundColor: '#FFFFFF',
               borderRadius: 32,
               padding: '32px 28px',
-              maxWidth: 480,
+              maxWidth: 'min(480px, 92vw)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
               width: '100%',
               boxShadow: '0px 24px 60px rgba(0,0,0,0.2)',
               position: 'relative',
