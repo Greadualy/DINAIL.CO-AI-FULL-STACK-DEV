@@ -5,13 +5,17 @@ const {
   getAllConsultations,
   updateConsultation,
 } = require('../controllers/consultation.controller');
-const { optionalFirebaseToken } = require('../middlewares/auth.middleware');
+const {
+  verifyFirebaseToken,
+  optionalFirebaseToken,
+  requireAdmin,
+} = require('../middlewares/auth.middleware');
 
 const router = express.Router();
 
-router.get('/', getAllConsultations);
-router.get('/me', optionalFirebaseToken, getMyConsultations);
+router.get('/', verifyFirebaseToken, requireAdmin, getAllConsultations);
+router.get('/me', verifyFirebaseToken, getMyConsultations);
 router.post('/', optionalFirebaseToken, createConsultation);
-router.patch('/:id', updateConsultation);
+router.patch('/:id', verifyFirebaseToken, requireAdmin, updateConsultation);
 
 module.exports = router;

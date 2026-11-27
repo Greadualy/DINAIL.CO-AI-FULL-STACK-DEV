@@ -944,6 +944,7 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
   const [fourFingersPreview, setFourFingersPreview] = useState<string | null>(null);
   const [thumbFile, setThumbFile] = useState<File | null>(null);
   const [thumbPreview, setThumbPreview] = useState<string | null>(null);
+  const [selectedCoin, setSelectedCoin] = useState<string>('500');
 
   const [aiStatus, setAiStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [aiStepIndex, setAiStepIndex] = useState(0);
@@ -1148,7 +1149,7 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
     scanTimersRef.current = [t1, t2];
 
     try {
-      const result = await analyzeNailPhotos(fourFingersInput, thumbInput);
+      const result = await analyzeNailPhotos(fourFingersInput, thumbInput, selectedCoin);
       clearScanTimers();
 
       if (!result.success) {
@@ -1669,6 +1670,52 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Pilihan Patokan Koin Referensi */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            marginBottom: 14,
+            padding: '10px 14px',
+            backgroundColor: '#FFFFFF',
+            borderRadius: 12,
+            border: '1px solid #EAE6E1',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#141413' }}>
+              Jenis Koin Referensi:
+            </span>
+            <span style={{ fontSize: 11.5, color: '#767676' }}>
+              (Patokan skala piksel ke milimeter)
+            </span>
+          </div>
+          <select
+            value={selectedCoin}
+            onChange={(e) => setSelectedCoin(e.target.value)}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: '1px solid #D5D0C8',
+              backgroundColor: '#FAF7F5',
+              fontSize: 12.5,
+              fontWeight: 600,
+              color: '#141413',
+              cursor: 'pointer',
+              outline: 'none',
+            }}
+          >
+            <option value="500">Rp 500 (27.1 mm - Rekomendasi)</option>
+            <option value="1000">Rp 1000 (24.1 mm)</option>
+            <option value="200">Rp 200 (25.0 mm)</option>
+            <option value="100">Rp 100 (23.0 mm)</option>
+            <option value="50">Rp 50 (20.0 mm)</option>
+          </select>
+        </div>
 
         {/* 2 Slot Upload Foto (grid-cols-1 sm:grid-cols-2 gap-3.5) */}
         <div className="nail-ai-upload-grid grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -2550,6 +2597,10 @@ function KonsultasiTab({
             estimatedPrice: newOrder.estimasiHarga,
             customerName: newOrder.customerName,
             userId: newOrder.userId,
+            aiSuggestedSize: savedNailData?.preset || null,
+            aiMeasurements: savedNailData?.leftHand || null,
+            isValidPhoto: Boolean(savedNailData?.fourFingersPhotoUrl || savedNailData?.photoUrl),
+            coinDetected: Boolean(newOrder.aiConfidenceScore && newOrder.aiConfidenceScore > 0),
           }),
         });
         const resJson = await res.json();
