@@ -956,8 +956,10 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
   const scanTimersRef = useRef<number[]>([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    let isMounted = true;
+    const timer = setTimeout(async () => {
       const loaded = loadNailData(userId);
+      if (!isMounted) return;
       setNailData(loaded);
       setFourFingersPreview(loaded.fourFingersPhotoUrl || null);
       setThumbPreview(loaded.thumbPhotoUrl || null);
@@ -968,8 +970,42 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
         setAiResult(null);
         setAiStatus('idle');
       }
+
+      // Sync dari Supabase jika ada data yang tersimpan di server
+      try {
+        if (auth.currentUser) {
+          const idToken = await auth.currentUser.getIdToken();
+          const res = await fetch(`${BACKEND_URL}/api/v1/auth/me`, {
+            headers: { Authorization: `Bearer ${idToken}` },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            const dbMeasurements = json.data?.savedMeasurements;
+            const dbPreset = json.data?.savedSizePreset;
+            if (dbMeasurements && dbMeasurements.leftHand && isMounted) {
+              setNailData((prev) => {
+                const updated: NailSizeData = {
+                  ...prev,
+                  preset: (dbPreset as SizePreset) || prev.preset,
+                  leftHand: dbMeasurements.leftHand,
+                  rightHand: dbMeasurements.rightHand || dbMeasurements.leftHand,
+                  updatedAt: dbMeasurements.updatedAt || prev.updatedAt,
+                  aiConfidenceScore: dbMeasurements.confidenceScore ?? prev.aiConfidenceScore,
+                };
+                saveNailData(updated, userId);
+                return updated;
+              });
+            }
+          }
+        }
+      } catch {
+        // Fallback to local
+      }
     }, 0);
-    return () => clearTimeout(timer);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
   }, [userId]);
 
   useEffect(() => {
@@ -1228,7 +1264,7 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
   };
 
   // Simpan Data Ukuran Kuku
-  const handleSave = () => {
+  const handleSave = async () => {
     const now = new Date();
     const dateLabel = now.toLocaleDateString('id-ID', {
       day: 'numeric',
@@ -1242,6 +1278,34 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
     };
     saveNailData(finalData, userId);
     setNailData(finalData);
+
+    // Sinkronisasi ke Database Supabase jika pengguna sedang login
+    try {
+      if (auth.currentUser) {
+        const idToken = await auth.currentUser.getIdToken();
+        await fetch(`${BACKEND_URL}/api/v1/auth/nail-size`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            preset: finalData.preset,
+            measurements: {
+              leftHand: finalData.leftHand,
+              rightHand: finalData.rightHand,
+              unit: 'mm',
+              updatedAt: finalData.updatedAt,
+              coinType: selectedCoin,
+              confidenceScore: aiResult?.confidenceScore ?? nailData.aiConfidenceScore,
+            },
+          }),
+        });
+      }
+    } catch (dbErr) {
+      console.warn('[UkuranKuku] Gagal sinkronisasi ke database Supabase:', dbErr);
+    }
+
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3500);
   };
