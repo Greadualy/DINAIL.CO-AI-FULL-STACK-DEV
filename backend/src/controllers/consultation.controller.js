@@ -28,6 +28,12 @@ const createConsultation = async (req, res, next) => {
       customerNotes,
       estimatedPrice,
       productId,
+      isValidPhoto,
+      coinDetected,
+      aiSuggestedSize,
+      aiMeasurements,
+      confirmedSize,
+      confirmedMeasurements,
     } = req.body;
 
     let dbUser = await prisma.user.findFirst({
@@ -62,6 +68,12 @@ const createConsultation = async (req, res, next) => {
         photoUrl: photoUrl || null,
         customerNotes: customerNotes || null,
         estimatedPrice: estimatedPrice || 'Menunggu estimasi',
+        isValidPhoto: Boolean(isValidPhoto),
+        coinDetected: Boolean(coinDetected),
+        aiSuggestedSize: aiSuggestedSize || null,
+        aiMeasurements: aiMeasurements || null,
+        confirmedSize: confirmedSize || null,
+        confirmedMeasurements: confirmedMeasurements || null,
         status: 'PENDING',
       },
       include: {

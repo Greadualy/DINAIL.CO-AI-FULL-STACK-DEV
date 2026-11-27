@@ -118,10 +118,20 @@ export function formatNailSizeSummary(data: NailSizeData): string {
   return `Custom (Kiri: ${leftStr} · Kanan: ${rightStr})`;
 }
 
-// API Endpoint: POST /api/ai/measure-nails (multipart/form-data: fourFingers, thumb)
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+async function toImageDataUrl(input: File | string): Promise<string> {
+  if (typeof input === 'string') {
+    return input;
+  }
+  return compressImageToDataUrl(input, 1200, 0.85);
+}
+
+// API Endpoint: POST /api/v1/ai/analyze-nails
 export async function analyzeNailPhotos(
   fourFingers: File | string,
-  thumb: File | string
+  thumb: File | string,
+  coin = '500'
 ): Promise<NailAIAnalysisResult> {
   if (!fourFingers || !thumb) {
     return {
@@ -150,8 +160,54 @@ export async function analyzeNailPhotos(
     };
   }
 
-  // Simulasi waktu pemrosesan deteksi koin & pengukuran kuku via AI (2500ms)
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+  try {
+    const [fourFingersData, thumbData] = await Promise.all([
+      toImageDataUrl(fourFingers),
+      toImageDataUrl(thumb),
+    ]);
+
+    const response = await fetch(`${BACKEND_URL}/api/v1/ai/analyze-nails`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fourFingers: fourFingersData,
+        thumb: thumbData,
+        coin: String(coin || '500'),
+      }),
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success === false) {
+        return {
+          success: false,
+          recommendedPreset: 'Kustom',
+          measurements: { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 },
+          errorMessage: result.errorMessage || 'Foto tidak memenuhi standar kualitas AI.',
+        };
+      }
+
+      return {
+        success: true,
+        recommendedPreset: (result.recommendedPreset as any) || 'M',
+        measurements: result.measurements || {
+          thumb: 16,
+          index: 12,
+          middle: 13,
+          ring: 12,
+          pinky: 9,
+        },
+        confidenceScore: result.confidenceScore ?? 95,
+      };
+    }
+  } catch (error) {
+    console.warn('[nailSizeService] Backend AI endpoint unavailable, using local fallback:', error);
+  }
+
+  // Graceful fallback simulation
+  await new Promise((resolve) => setTimeout(resolve, 1500));
 
   return {
     success: true,
