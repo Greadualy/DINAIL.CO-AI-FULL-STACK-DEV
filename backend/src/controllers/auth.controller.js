@@ -73,7 +73,44 @@ const getMe = async (req, res, next) => {
   }
 };
 
+const saveNailSize = async (req, res, next) => {
+  try {
+    const { uid } = req.user;
+    const { preset, measurements } = req.body || {};
+
+    if (!measurements) {
+      return res.status(400).json({
+        success: false,
+        message: 'Data ukuran kuku (measurements) wajib disertakan.',
+      });
+    }
+
+    console.log(`[Auth] Saving nail size measurements for user (${uid})...`);
+
+    const updatedUser = await prisma.user.update({
+      where: { firebaseUid: uid },
+      data: {
+        savedSizePreset: preset || 'Custom',
+        savedMeasurements: measurements,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Ukuran kuku berhasil disimpan ke database Supabase.',
+      data: {
+        savedSizePreset: updatedUser.savedSizePreset,
+        savedMeasurements: updatedUser.savedMeasurements,
+      },
+    });
+  } catch (error) {
+    console.error('[Auth] Error saving nail size to DB:', error.message);
+    next(error);
+  }
+};
+
 module.exports = {
   syncUser,
   getMe,
+  saveNailSize,
 };
