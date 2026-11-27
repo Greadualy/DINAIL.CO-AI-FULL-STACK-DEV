@@ -12,11 +12,50 @@ const generateConsultationCode = () => {
 
 const createConsultation = async (req, res, next) => {
   try {
-    const userPayload = req.user || {};
-    const uid = userPayload.uid || req.body.userId || 'guest-user';
-    const email = userPayload.email || req.body.email || 'guest@dinail.co';
-    const name = userPayload.name || req.body.customerName || 'Customer';
-    const picture = userPayload.picture || null;
+    let dbUser = null;
+
+    if (req.user && req.user.uid) {
+      // Authenticated user: Strictly bind to verified Firebase token data
+      const { uid, email, name: tokenName, picture } = req.user;
+      const verifiedEmail = email || `${uid}@dinail.local`;
+      const displayName = tokenName || req.body.customerName || 'Customer';
+
+      dbUser = await prisma.user.findUnique({
+        where: { firebaseUid: uid },
+      });
+
+      if (!dbUser) {
+        dbUser = await prisma.user.create({
+          data: {
+            firebaseUid: uid,
+            email: verifiedEmail,
+            name: displayName,
+            photoUrl: picture || null,
+            role: 'customer',
+          },
+        });
+      }
+    } else {
+      // Guest submission: Strictly isolated to designated guest account
+      // NEVER allow linking to registered user accounts by arbitrary client-supplied email/UID
+      const GUEST_UID = 'guest-user';
+      const GUEST_EMAIL = 'guest@dinail.co';
+
+      dbUser = await prisma.user.findUnique({
+        where: { firebaseUid: GUEST_UID },
+      });
+
+      if (!dbUser) {
+        dbUser = await prisma.user.create({
+          data: {
+            firebaseUid: GUEST_UID,
+            email: GUEST_EMAIL,
+            name: req.body.customerName || 'Guest Customer',
+            role: 'customer',
+          },
+        });
+      }
+    }
 
     const {
       consultationCode,
@@ -35,24 +74,6 @@ const createConsultation = async (req, res, next) => {
       confirmedSize,
       confirmedMeasurements,
     } = req.body;
-
-    let dbUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ firebaseUid: uid }, { email }],
-      },
-    });
-
-    if (!dbUser) {
-      dbUser = await prisma.user.create({
-        data: {
-          firebaseUid: uid,
-          email,
-          name,
-          photoUrl: picture,
-          role: 'customer',
-        },
-      });
-    }
 
     const assignedCode = consultationCode || generateConsultationCode();
 
@@ -103,12 +124,17 @@ const createConsultation = async (req, res, next) => {
 
 const getMyConsultations = async (req, res, next) => {
   try {
-    const { uid, email } = req.user;
+    if (!req.user || !req.user.uid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Akses ditolak. Token autentikasi diperlukan untuk melihat riwayat konsultasi.',
+      });
+    }
 
-    const dbUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ firebaseUid: uid }, { email }],
-      },
+    const { uid } = req.user;
+
+    const dbUser = await prisma.user.findUnique({
+      where: { firebaseUid: uid },
     });
 
     if (!dbUser) {
@@ -237,13 +263,32 @@ const updateConsultation = async (req, res, next) => {
         cancelled: 'CANCELLED',
       };
       const mapped = statusMap[status.toLowerCase()] || status.toUpperCase();
+      const validStatuses = ['PENDING', 'CONFIRMED', 'NEED_REPHOTO', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+      if (!validStatuses.includes(mapped)) {
+        return res.status(400).json({
+          success: false,
+          message: `Nilai status '${status}' tidak valid. Status yang didukung: ${validStatuses.join(', ')}`,
+        });
+      }
+
       updatePayload.status = mapped;
       updatePayload.reviewedAt = new Date();
     }
 
+    if (shopeeUrl !== undefined && shopeeUrl !== null && shopeeUrl !== '') {
+      if (typeof shopeeUrl !== 'string' || (!shopeeUrl.startsWith('https://') && !shopeeUrl.startsWith('http://'))) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tautan Shopee harus berupa URL web yang valid (diawali https://).',
+        });
+      }
+      updatePayload.shopeeUrl = shopeeUrl;
+    } else if (shopeeUrl === null || shopeeUrl === '') {
+      updatePayload.shopeeUrl = null;
+    }
+
     if (adminFeedback !== undefined) updatePayload.adminFeedback = adminFeedback;
     if (estimatedPrice !== undefined) updatePayload.estimatedPrice = estimatedPrice;
-    if (shopeeUrl !== undefined) updatePayload.shopeeUrl = shopeeUrl;
     if (confirmedSize !== undefined) updatePayload.confirmedSize = confirmedSize;
     if (confirmedMeasurements !== undefined) updatePayload.confirmedMeasurements = confirmedMeasurements;
 

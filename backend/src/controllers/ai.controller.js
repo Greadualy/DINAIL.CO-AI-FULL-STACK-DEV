@@ -2,27 +2,43 @@ const axios = require('axios');
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_IMAGE_BYTES = 12 * 1024 * 1024; // 12 MB
+const ALLOWED_COINS = ['50', '100', '200', '500', '1000'];
+
 /**
- * Convert a base64 or data URL to a Buffer and mime type
+ * Convert a base64 or data URL to a Buffer and mime type with security validation
  */
 function parseImageData(dataInput) {
   if (!dataInput || typeof dataInput !== 'string') {
-    return null;
+    return { error: 'Data gambar wajib disertakan dalam format Base64 atau DataURL.' };
   }
 
   const match = dataInput.match(/^data:([^;]+);base64,(.+)$/);
+  let mimeType = 'image/jpeg';
+  let base64Payload = dataInput;
+
   if (match) {
-    return {
-      mimeType: match[1],
-      buffer: Buffer.from(match[2], 'base64'),
-    };
+    mimeType = match[1].toLowerCase().trim();
+    base64Payload = match[2];
   }
 
-  // Raw base64 string
-  return {
-    mimeType: 'image/jpeg',
-    buffer: Buffer.from(dataInput, 'base64'),
-  };
+  if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+    return { error: `Tipe file '${mimeType}' tidak didukung. Harap gunakan format JPEG, PNG, atau WebP.` };
+  }
+
+  try {
+    const buffer = Buffer.from(base64Payload, 'base64');
+    if (buffer.length === 0) {
+      return { error: 'File gambar kosong atau data Base64 tidak valid.' };
+    }
+    if (buffer.length > MAX_IMAGE_BYTES) {
+      return { error: 'Ukuran gambar melebihi batas maksimum 12 MB.' };
+    }
+    return { mimeType, buffer };
+  } catch {
+    return { error: 'Gagal mendekode gambar Base64.' };
+  }
 }
 
 /**
@@ -59,15 +75,17 @@ const analyzePhoto = async (req, res, next) => {
     }
 
     const parsed = parseImageData(image);
-    if (!parsed || !parsed.buffer || parsed.buffer.length === 0) {
+    if (parsed.error || !parsed.buffer) {
       return res.status(400).json({
         success: false,
-        message: 'Format gambar tidak valid.',
+        message: parsed.error || 'Format gambar tidak valid.',
       });
     }
 
+    const validatedCoin = ALLOWED_COINS.includes(String(coin)) ? String(coin) : '500';
+
     try {
-      const aiResult = await callPythonAiService(parsed.buffer, parsed.mimeType, coin);
+      const aiResult = await callPythonAiService(parsed.buffer, parsed.mimeType, validatedCoin);
       return res.status(200).json({
         success: aiResult.ok ?? true,
         source: 'ai_service',
@@ -117,12 +135,21 @@ const analyzeNails = async (req, res, next) => {
     const parsedThumb = parseImageData(thumb);
     const parsedFingers = parseImageData(fourFingers);
 
-    if (!parsedThumb || !parsedFingers) {
+    if (parsedThumb.error || !parsedThumb.buffer) {
       return res.status(400).json({
         success: false,
-        message: 'Salah satu file gambar tidak valid.',
+        message: `Foto ibu jari tidak valid: ${parsedThumb.error || 'Format tidak didukung.'}`,
       });
     }
+
+    if (parsedFingers.error || !parsedFingers.buffer) {
+      return res.status(400).json({
+        success: false,
+        message: `Foto 4 jari tidak valid: ${parsedFingers.error || 'Format tidak didukung.'}`,
+      });
+    }
+
+    const validatedCoin = ALLOWED_COINS.includes(String(coin)) ? String(coin) : '500';
 
     let thumbAiResult = null;
     let fingersAiResult = null;
@@ -131,8 +158,8 @@ const analyzeNails = async (req, res, next) => {
     try {
       // Analyze both photos in parallel against the Python AI service
       const [resThumb, resFingers] = await Promise.all([
-        callPythonAiService(parsedThumb.buffer, parsedThumb.mimeType, coin),
-        callPythonAiService(parsedFingers.buffer, parsedFingers.mimeType, coin),
+        callPythonAiService(parsedThumb.buffer, parsedThumb.mimeType, validatedCoin),
+        callPythonAiService(parsedFingers.buffer, parsedFingers.mimeType, validatedCoin),
       ]);
       thumbAiResult = resThumb;
       fingersAiResult = resFingers;

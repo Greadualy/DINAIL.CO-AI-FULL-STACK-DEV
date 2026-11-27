@@ -7,7 +7,16 @@ const aiRoutes = require('./routes/ai.routes');
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
+  : '*';
+
+app.use(
+  cors({
+    origin: allowedOrigins === '*' ? true : allowedOrigins,
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
@@ -46,12 +55,17 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error(err);
-  const status = err.statusCode || 500;
+  console.error('[Unhandled Server Error]', err);
+  const status = err.statusCode || err.status || 500;
+  const isDev = process.env.NODE_ENV === 'development';
+  const safeMessage = (status >= 500 && !isDev)
+    ? 'Terjadi kesalahan internal pada server.'
+    : (err.message || 'Terjadi kesalahan pada server.');
+
   res.status(status).json({
     success: false,
-    message: err.message || 'Terjadi kesalahan internal pada server.',
-    ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {}),
+    message: safeMessage,
+    ...(isDev ? { stack: err.stack } : {}),
   });
 });
 

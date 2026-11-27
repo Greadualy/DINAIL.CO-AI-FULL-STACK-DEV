@@ -2597,6 +2597,10 @@ function KonsultasiTab({
             estimatedPrice: newOrder.estimasiHarga,
             customerName: newOrder.customerName,
             userId: newOrder.userId,
+            aiSuggestedSize: savedNailData?.preset || null,
+            aiMeasurements: savedNailData?.leftHand || null,
+            isValidPhoto: Boolean(savedNailData?.fourFingersPhotoUrl || savedNailData?.photoUrl),
+            coinDetected: Boolean(newOrder.aiConfidenceScore && newOrder.aiConfidenceScore > 0),
           }),
         });
         const resJson = await res.json();
