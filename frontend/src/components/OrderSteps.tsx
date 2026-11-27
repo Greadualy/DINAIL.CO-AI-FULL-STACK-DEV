@@ -308,17 +308,6 @@ function StepCard({ step, colInRow }: { step: typeof STEPS[0]; colInRow: number 
             gap: '10px',
           }}
         >
-          <span
-            style={{
-              width: '10px',
-              height: '10px',
-              borderRadius: '50%',
-              backgroundColor: '#F37338',
-              flexShrink: 0,
-              display: 'inline-block',
-            }}
-            aria-hidden="true"
-          />
           LANGKAH {step.num}
         </p>
         <h3
@@ -493,17 +482,6 @@ function MobileStepCard({ step, index }: { step: typeof STEPS[0]; index: number 
             gap: '6px',
           }}
         >
-          <span
-            style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              backgroundColor: '#F37338',
-              flexShrink: 0,
-              display: 'inline-block',
-            }}
-            aria-hidden="true"
-          />
           LANGKAH {step.num}
         </p>
 
@@ -584,17 +562,6 @@ export default function OrderSteps() {
                 gap: '10px',
               }}
             >
-              <span
-                style={{
-                  width: '11px',
-                  height: '11px',
-                  borderRadius: '50%',
-                  backgroundColor: '#F37338',
-                  flexShrink: 0,
-                  display: 'inline-block',
-                }}
-                aria-hidden="true"
-              />
               TATA CARA PEMESANAN
             </p>
             <RevealTitle

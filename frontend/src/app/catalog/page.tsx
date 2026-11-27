@@ -323,17 +323,6 @@ export default function CatalogPage() {
               gap: '10px',
             }}
           >
-            <span
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                backgroundColor: '#F37338',
-                flexShrink: 0,
-                display: 'inline-block',
-              }}
-              aria-hidden="true"
-            />
             KOLEKSI DESAIN DINAIL.CO
           </p>
 
@@ -799,30 +788,6 @@ export default function CatalogPage() {
                   >
                     {item.category}
                   </span>
-
-                  {/* Top-Right Badge: Varian Desain */}
-                  <span
-                    className="catalog-card-badge-right lg:text-[11px] lg:px-2.5 lg:py-1"
-                    style={{
-                      position: 'absolute',
-                      top: 12,
-                      right: 12,
-                      backgroundColor:
-                        item.subType === 'Freestyle Art'
-                          ? '#F37338'
-                          : 'rgba(20, 20, 19, 0.86)',
-                      backdropFilter: 'blur(8px)',
-                      color: '#FFFFFF',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      padding: '5px 12px',
-                      borderRadius: '999px',
-                      letterSpacing: '0.02em',
-                      boxShadow: '0px 4px 12px rgba(20, 20, 19, 0.12)',
-                    }}
-                  >
-                    {item.typeBadge}
-                  </span>
                 </div>
 
                 {/* Info di Bawah Gambar */}
@@ -886,17 +851,6 @@ export default function CatalogPage() {
                         color: '#262627',
                       }}
                     >
-                      <span
-                        style={{
-                          width: '6px',
-                          height: '6px',
-                          borderRadius: '50%',
-                          backgroundColor: '#F37338',
-                          display: 'inline-block',
-                          flexShrink: 0,
-                        }}
-                        aria-hidden="true"
-                      />
                       <span className="catalog-card-shape-prefix">Rekomendasi:&nbsp;</span>
                       <strong style={{ fontWeight: 600 }}>{item.recommendedShape}</strong>
                     </div>
@@ -958,17 +912,6 @@ export default function CatalogPage() {
                   gap: '10px',
                 }}
               >
-                <span
-                  style={{
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '50%',
-                    backgroundColor: '#F37338',
-                    flexShrink: 0,
-                    display: 'inline-block',
-                  }}
-                  aria-hidden="true"
-                />
                 PUNYA REFERENSI DESAIN SENDIRI?
               </p>
               <RevealTitle
@@ -1083,16 +1026,6 @@ export default function CatalogPage() {
                     gap: '8px',
                   }}
                 >
-                  <span
-                    style={{
-                      width: '10px',
-                      height: '10px',
-                      borderRadius: '50%',
-                      backgroundColor: '#F37338',
-                      display: 'inline-block',
-                    }}
-                    aria-hidden="true"
-                  />
                   {previewItem.category}
                 </span>
                 <span

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import Skeleton from '@/components/Skeleton';
 import { useRole } from '@/context/RoleContext';
@@ -710,21 +711,21 @@ function ForecastChart({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function OwnerDashboardPage() {
-  const { currentUser, currentRole } = useRole();
+  const { currentUser, isAuthLoading } = useRole();
+  const normalizedRole = currentUser?.role?.toLowerCase();
+  const canAccessOwner = Boolean(currentUser && normalizedRole === 'owner');
   const [activeMenu, setActiveMenu] = useState<OwnerMenu>('penjualan');
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Block Admin role from accessing Owner Dashboard
-  const isBlockedAdmin = currentRole === 'admin' || currentUser?.role === 'admin';
-
   // SSR-safe state hydrated from localStorage after mount
   const [consultations, setConsultations] = useState<AdminOrder[]>([]);
   const [offlineSales, setOfflineSales] = useState<OfflineSaleItem[]>([]);
 
   useEffect(() => {
+    if (isAuthLoading || !canAccessOwner) return;
     const hydrateTimer = setTimeout(() => {
       setConsultations(loadAllConsultations());
       setOfflineSales(loadOfflineSales());
@@ -736,7 +737,7 @@ export default function OwnerDashboardPage() {
       clearTimeout(hydrateTimer);
       if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
     };
-  }, []);
+  }, [isAuthLoading, canAccessOwner]);
 
   const handleTimeRangeChange = (nextRange: TimeRange) => {
     if (nextRange === timeRange) return;
@@ -897,98 +898,56 @@ export default function OwnerDashboardPage() {
     { label: 'Semua Waktu', value: 'semua' },
   ];
 
-  if (isBlockedAdmin) {
+  if (isAuthLoading) {
     return (
       <div
+        aria-busy="true"
+        aria-label="Memuat halaman"
         style={{
           minHeight: '100vh',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#F8F5F2',
-          padding: 24,
+          backgroundColor: '#F3F0EE',
           fontFamily: 'var(--font-primary, Poppins, sans-serif)',
         }}
       >
         <div
           style={{
-            maxWidth: 460,
-            width: '100%',
-            background: '#FFFFFF',
-            borderRadius: 16,
-            border: '1px solid #ECE6E0',
-            padding: 32,
-            textAlign: 'center',
-            boxShadow: '0 8px 30px rgba(0,0,0,0.06)',
+            width: 32,
+            height: 32,
+            border: '2.5px solid #E5E0DA',
+            borderTopColor: '#141413',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
           }}
-        >
-          <div
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: '50%',
-              backgroundColor: 'rgba(243, 115, 56, 0.1)',
-              color: '#F37338',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px',
-            }}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-          </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#141413', margin: '0 0 8px' }}>
-            Akses Terbatas: Khusus Owner
-          </h2>
-          <p style={{ fontSize: 13.5, color: '#6B6B6B', lineHeight: 1.55, margin: '0 0 20px' }}>
-            Akun dengan peran <strong>Admin</strong> tidak memiliki izin untuk mengakses Dashboard Owner. Silakan kembali ke Panel Admin atau Beranda.
-          </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link
-              href="/admin"
-              style={{
-                padding: '10px 18px',
-                borderRadius: 8,
-                backgroundColor: '#F37338',
-                color: '#FFFFFF',
-                fontSize: 13,
-                fontWeight: 600,
-                textDecoration: 'none',
-              }}
-            >
-              Kembali ke Panel Admin
-            </Link>
-            <Link
-              href="/"
-              style={{
-                padding: '10px 18px',
-                borderRadius: 8,
-                backgroundColor: '#F3F0EE',
-                color: '#141413',
-                fontSize: 13,
-                fontWeight: 600,
-                textDecoration: 'none',
-              }}
-            >
-              Ke Beranda
-            </Link>
-          </div>
-        </div>
+        />
       </div>
     );
   }
 
+  if (!canAccessOwner) {
+    notFound();
+  }
+
   return (
-    <div className="overflow-x-hidden" style={{ display: 'flex', minHeight: '100vh', width: '100%', maxWidth: '100%', overflowX: 'hidden', background: '#F3F0EE', fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
+    <div
+      className="dashboard-shell min-h-screen lg:h-screen lg:overflow-hidden flex flex-col lg:flex-row"
+      style={{
+        minHeight: '100vh',
+        width: '100%',
+        maxWidth: '100%',
+        background: '#F3F0EE',
+        fontFamily: 'var(--font-primary, Poppins, sans-serif)',
+      }}
+    >
       {/* ── Sidebar (Desktop >= 1024px) ── */}
       <aside
-        className="hidden lg:flex dashboard-sidebar-desktop"
+        className="hidden lg:flex lg:flex-col lg:h-screen lg:shrink-0 lg:sticky lg:top-0 overflow-y-auto dashboard-sidebar-desktop"
         style={{
           width: 240,
           minWidth: 240,
+          flexShrink: 0,
           background: '#FFFFFF',
           borderRight: '1px solid #EAE6E1',
           display: 'flex',
@@ -996,7 +955,7 @@ export default function OwnerDashboardPage() {
           position: 'sticky',
           top: 0,
           height: '100vh',
-          overflow: 'hidden',
+          overflowY: 'auto',
         }}
       >
         {/* Brand */}
@@ -1064,7 +1023,17 @@ export default function OwnerDashboardPage() {
         </nav>
 
         {/* Footer links */}
-        <div style={{ padding: '14px 12px', borderTop: '1px solid #EAE6E1', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div
+          className="mt-auto"
+          style={{
+            marginTop: 'auto',
+            padding: '14px 12px 20px',
+            borderTop: '1px solid #EAE6E1',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+          }}
+        >
           <Link
             href="/admin"
             style={{ ...sidebarItemBase, color: '#6B6760', textDecoration: 'none', fontSize: 13, display: 'flex' }}
@@ -1228,7 +1197,10 @@ export default function OwnerDashboardPage() {
       </AnimatePresence>
 
       {/* ── Main Content ── */}
-      <main style={{ flex: 1, minWidth: 0, width: '100%', display: 'flex', flexDirection: 'column' }}>
+      <main
+        className="dashboard-main-scroll flex-1 min-w-0 lg:h-screen lg:overflow-y-auto"
+        style={{ flex: 1, minWidth: 0, width: '100%', display: 'flex', flexDirection: 'column' }}
+      >
         {/* Header (Ringkas & Sticky di Mobile < 1024px, Utuh di Desktop >= 1024px) */}
         <div
           className="dashboard-header flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3"
@@ -2155,8 +2127,8 @@ function InsightTab({
         <span style={{ color: '#9B978F', flexShrink: 0 }}><IconInfo /></span>
         <p style={{ fontSize: 12, color: '#9B978F', margin: 0 }}>
           <strong style={{ color: '#6B6760' }}>Data Science Model</strong>
-          {' '}&bull;{' '}Terakhir diperbarui: 25 Nov 2026
-          {' '}&bull;{' '}Siap integrasi endpoint API
+          {' '}·{' '}Terakhir diperbarui: 25 Nov 2026
+          {' '}·{' '}Siap integrasi endpoint API
         </p>
       </div>
         </motion.div>

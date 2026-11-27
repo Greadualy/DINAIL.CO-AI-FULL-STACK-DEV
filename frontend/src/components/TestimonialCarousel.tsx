@@ -281,17 +281,6 @@ export default function TestimonialCarousel() {
               gap: '10px',
             }}
           >
-            <span
-              style={{
-                width: '11px',
-                height: '11px',
-                borderRadius: '50%',
-                backgroundColor: '#F37338',
-                flexShrink: 0,
-                display: 'inline-block',
-              }}
-              aria-hidden="true"
-            />
             PENILAIAN &amp; CERITA PELANGGAN
           </p>
           <RevealTitle
@@ -497,9 +486,6 @@ export default function TestimonialCarousel() {
                     ) : (
                       <span style={{ fontSize: 12, color: '#696969' }}>Pembeli Shopee</span>
                     )}
-                    <span style={{ fontSize: 12, color: '#CF4500', fontWeight: 600 }}>
-                      dinail.co ✓
-                    </span>
                   </div>
                 </div>
               </div>
@@ -642,7 +628,6 @@ export default function TestimonialCarousel() {
               }}
             >
               <span style={{ fontSize: 12, color: '#696969' }}>Terverifikasi Pembeli Shopee</span>
-              <span style={{ fontSize: 12, color: '#CF4500', fontWeight: 600 }}>dinail.co ✓</span>
             </div>
           </div>
         </div>

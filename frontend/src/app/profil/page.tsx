@@ -1308,16 +1308,6 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
           flexWrap: 'wrap',
         }}
       >
-        <span
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: '50%',
-            backgroundColor: '#F37338',
-            display: 'inline-block',
-            flexShrink: 0,
-          }}
-        />
         <span style={{ color: '#696969' }}>Ukuran aktif:</span>
         <span style={{ fontWeight: 600 }}>
           {nailData.preset === 'Custom' ? 'Kustom' : `Size ${nailData.preset}`} ({nailData.leftHand.thumb}-{nailData.leftHand.index}-{nailData.leftHand.middle}-{nailData.leftHand.ring}-{nailData.leftHand.pinky} mm)
@@ -1354,17 +1344,6 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
         >
           <div style={{ minWidth: 0, flex: '1 1 240px' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  backgroundColor: '#F37338',
-                  display: 'inline-block',
-                  flexShrink: 0,
-                }}
-                aria-hidden="true"
-              />
               <h3 style={{ fontSize: 15, fontWeight: 700, color: '#141413', margin: 0 }}>
                 Ukur Otomatis via Foto (AI)
               </h3>
@@ -1994,17 +1973,6 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      backgroundColor: '#F37338',
-                      display: 'inline-block',
-                      flexShrink: 0,
-                    }}
-                    aria-hidden="true"
-                  />
                   <span style={{ fontSize: 13, fontWeight: 700, color: '#141413' }}>
                     Analisis AI Selesai — Rekomendasi:{' '}
                     {aiResult.recommendedPreset === 'Kustom'
@@ -2013,7 +1981,7 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
                     {aiResult.confidenceScore ? ` (Akurasi ${aiResult.confidenceScore}%)` : ''}
                   </span>
                 </div>
-                <p style={{ fontSize: 12, color: '#57534E', margin: 0, lineHeight: 1.5, paddingLeft: 16 }}>
+                <p style={{ fontSize: 12, color: '#57534E', margin: 0, lineHeight: 1.5 }}>
                   Angka di bawah sudah terisi otomatis. Kamu tetap bisa menyesuaikan secara manual sebelum menyimpan.
                 </p>
               </motion.div>
@@ -2721,16 +2689,6 @@ function KonsultasiTab({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        backgroundColor: '#F37338',
-                        display: 'inline-block',
-                        flexShrink: 0,
-                      }}
-                    />
                     <span style={{ fontSize: 13, color: '#141413', fontWeight: 600 }}>
                       Ukuran aktif:
                     </span>
@@ -3948,7 +3906,10 @@ function AkunTab({
 type MobileProfileView = 'hub' | ActiveMenu;
 
 function ProfileContent() {
-  const { currentUser, currentRole, userId, logout, openModal } = useRole();
+  const { currentUser, userId, isAuthLoading, logout, openModal } = useRole();
+  const dbRole = !isAuthLoading ? currentUser?.role?.toLowerCase() : null;
+  const isAdminOrOwner = dbRole === 'admin' || dbRole === 'owner';
+  const isOwnerRole = dbRole === 'owner';
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const initialDesignParam = searchParams.get('design') || undefined;
@@ -4365,16 +4326,6 @@ function ProfileContent() {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <span
-                        style={{
-                          width: 7,
-                          height: 7,
-                          borderRadius: '50%',
-                          backgroundColor: '#F37338',
-                          flexShrink: 0,
-                        }}
-                        aria-hidden="true"
-                      />
                       <span style={{ fontSize: 12.5, color: '#141413', fontWeight: 500 }}>
                         Ukuran kuku belum diatur.
                       </span>
@@ -4593,7 +4544,7 @@ function ProfileContent() {
                   </button>
 
                   {/* Tautan Dashboard Khusus Role Admin/Owner */}
-                  {(currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner') && (
+                  {isAdminOrOwner && (
                     <Link
                       href="/admin"
                       style={{
@@ -4615,7 +4566,7 @@ function ProfileContent() {
                     </Link>
                   )}
 
-                  {(currentRole === 'owner' || currentUser?.role === 'owner') && (
+                  {isOwnerRole && (
                     <Link
                       href="/owner"
                       style={{
@@ -4924,7 +4875,7 @@ function ProfileContent() {
               {/* Quick links ke Catalog & Price List (disembunyikan di mobile < 1024px) */}
               <div
                 className={
-                  currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner'
+                  isAdminOrOwner
                     ? 'profil-quicklinks-box'
                     : 'profil-quicklinks-box profil-quicklinks-desktop-only'
                 }
@@ -4958,7 +4909,7 @@ function ProfileContent() {
                 >
                   Cek Daftar Harga
                 </Link>
-                {(currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner') && (
+                {isAdminOrOwner && (
                   <Link
                     href="/admin"
                     style={{
@@ -4974,7 +4925,7 @@ function ProfileContent() {
                     Dashboard Admin
                   </Link>
                 )}
-                {(currentRole === 'owner' || currentUser?.role === 'owner') && (
+                {isOwnerRole && (
                   <Link
                     href="/owner"
                     style={{

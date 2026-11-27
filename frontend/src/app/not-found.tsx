@@ -53,17 +53,6 @@ export default function NotFound() {
               gap: '10px',
             }}
           >
-            <span
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                backgroundColor: '#F37338',
-                display: 'inline-block',
-                flexShrink: 0,
-              }}
-              aria-hidden="true"
-            />
             HALAMAN TIDAK DITEMUKAN
           </p>
 

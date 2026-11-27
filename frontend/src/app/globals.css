@@ -238,6 +238,57 @@ nav {
   box-shadow: var(--shadow-card);
 }
 
+/* Featured Works Editorial Pill Carousel */
+.featured-works-header {
+  width: min(920px, 68vw);
+}
+
+.featured-card-frame {
+  width: min(920px, 68vw);
+  aspect-ratio: 16 / 9;
+  container-type: inline-size;
+}
+
+.featured-nav-btn:hover,
+.featured-nav-btn:active {
+  background-color: #F37338 !important;
+  color: #FFFFFF !important;
+  border-color: #F37338 !important;
+}
+
+.featured-carousel-side-card:hover {
+  opacity: 0.9 !important;
+}
+
+.featured-main-pill {
+  border-radius: 9999px;
+}
+
+@media (max-width: 1023px) {
+  .featured-works-header {
+    width: min(760px, 74vw);
+  }
+
+  .featured-card-frame {
+    width: min(760px, 74vw);
+  }
+}
+
+@media (max-width: 639px) {
+  .featured-works-header {
+    width: calc(100% - 32px) !important;
+  }
+
+  .featured-card-frame {
+    width: calc(100% - 32px) !important;
+    aspect-ratio: 16 / 10 !important;
+  }
+
+  .featured-carousel-side-card {
+    display: none !important;
+  }
+}
+
 /* Eyebrow label */
 .eyebrow {
   font-size: 13px;
@@ -249,15 +300,6 @@ nav {
   align-items: center;
   gap: 10px;
   color: var(--color-ink-black);
-}
-.eyebrow::before {
-  content: '';
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background-color: var(--color-light-signal-orange);
-  flex-shrink: 0;
-  display: inline-block;
 }
 
 /* Primary Pill CTA Button — Center-Outward Expand Hover */
@@ -807,6 +849,10 @@ nav {
   .footer-columns-grid {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 36px 28px !important;
+  }
+
+  .footer-brand-col {
+    grid-column: 1 / -1;
   }
 }
 
@@ -1490,7 +1536,33 @@ nav {
   }
 }
 
-/* Admin & Owner Dashboard Mobile Drawer, Dropdowns, Card View & Responsive Grids (< 1024px) */
+/* Admin & Owner Dashboard Desktop Fixed Split Shell (>= 1024px) & Mobile Responsive (< 1024px) */
+.dashboard-shell {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.dashboard-sidebar-desktop {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+}
+
+.dashboard-main-scroll {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+}
+
 .dashboard-mobile-menu-btn,
 .admin-status-dropdown-mobile,
 .admin-orders-cards-mobile,
@@ -1527,8 +1599,23 @@ nav {
 }
 
 @media (max-width: 1023px) {
+  .dashboard-shell {
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 100vh;
+    overflow: visible !important;
+    overflow-x: clip !important;
+  }
+
   .dashboard-sidebar-desktop {
     display: none !important;
+  }
+
+  .dashboard-main-scroll {
+    height: auto !important;
+    overflow-y: visible !important;
+    overflow-x: clip !important;
+    overscroll-behavior-y: auto;
   }
 
   .dashboard-mobile-menu-btn {
@@ -1683,5 +1770,108 @@ nav {
   .admin-import-actions > button {
     flex: 1 1 140px !important;
     justify-content: center !important;
+  }
+}
+
+/* Price List — Interactive Series Details & Complimentary Tool Kit */
+.series-details-section {
+  margin-top: 80px;
+  margin-bottom: 80px;
+}
+
+.series-tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.series-tab-pill {
+  padding: 10px 26px;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.series-tab-pill[aria-selected='false']:hover {
+  background-color: #FAF9F7 !important;
+  border-color: #D6CFC7 !important;
+}
+
+.series-detail-card {
+  padding: 32px;
+}
+
+.series-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 40px;
+  align-items: stretch;
+}
+
+.series-detail-left {
+  grid-column: span 7 / span 7;
+}
+
+.series-toolkit-box {
+  grid-column: span 5 / span 5;
+  padding: 22px;
+}
+
+@media (max-width: 1023px) {
+  .series-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .series-detail-left,
+  .series-toolkit-box {
+    grid-column: span 1 / span 1;
+  }
+
+  .series-toolkit-box {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 639px) {
+  .series-details-section {
+    margin-top: 56px;
+    margin-bottom: 56px;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .series-tabs-bar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .series-tab-pill {
+    padding: 9px 4px;
+    font-size: 12.5px;
+    width: 100%;
+  }
+
+  .series-detail-card {
+    padding: 20px;
+  }
+
+  .series-toolkit-box {
+    padding: 18px;
+  }
+}
+
+/* Price List — 9 Pilihan Shape & Length Grid (3x3 Desktop, 2-col Tablet; Mobile < 640px unchanged) */
+.shape-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .shape-guide-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
   }
 }

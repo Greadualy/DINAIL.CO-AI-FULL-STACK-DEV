@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
 import Skeleton from '@/components/Skeleton';
@@ -439,8 +440,11 @@ function CopyPill({ text }: { text: string }) {
 }
 
 export default function AdminDashboardPage() {
-  const { currentUser, currentRole, login } = useRole();
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const { currentUser, isAuthLoading } = useRole();
+  const normalizedRole = currentUser?.role?.toLowerCase();
+  const canAccessAdmin = Boolean(
+    currentUser && (normalizedRole === 'admin' || normalizedRole === 'owner')
+  );
   const [activeMenu, setActiveMenu] = useState<AdminMenu>('orderan');
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [offlineSales, setOfflineSales] = useState<OfflineSaleItem[]>([]);
@@ -489,23 +493,7 @@ export default function AdminDashboardPage() {
   };
 
   useEffect(() => {
-    const cachedRole = typeof window !== 'undefined' ? localStorage.getItem('dinail_role') : null;
-    const isRoleAdmin =
-      cachedRole === 'admin' ||
-      cachedRole === 'owner' ||
-      currentRole === 'admin' ||
-      currentRole === 'owner' ||
-      currentUser?.role === 'admin' ||
-      currentUser?.role === 'owner';
-
-    const timer = setTimeout(() => {
-      setIsCheckingAuth(false);
-    }, isRoleAdmin ? 0 : 350);
-
-    return () => clearTimeout(timer);
-  }, [currentRole, currentUser]);
-
-  useEffect(() => {
+    if (isAuthLoading || !canAccessAdmin) return;
     let isMounted = true;
     fetch(`${BACKEND_URL}/api/v1/consultations`)
       .then((res) => res.json())
@@ -523,9 +511,10 @@ export default function AdminDashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, [activeMenu]);
+  }, [activeMenu, isAuthLoading, canAccessAdmin]);
 
   useEffect(() => {
+    if (isAuthLoading || !canAccessAdmin) return;
     const hydrateTimer = setTimeout(() => {
       setOrders(loadAllConsultations());
       setOfflineSales(loadOfflineSales());
@@ -539,7 +528,7 @@ export default function AdminDashboardPage() {
       clearTimeout(timer);
       if (refreshNoticeTimerRef.current) clearTimeout(refreshNoticeTimerRef.current);
     };
-  }, []);
+  }, [isAuthLoading, canAccessAdmin]);
 
   const showOrderSkeleton = isLoadingOrders || isRefreshing;
 
@@ -615,67 +604,6 @@ export default function AdminDashboardPage() {
     link.download = 'template_penjualan_offline_dinail.csv';
     link.click();
     URL.revokeObjectURL(url);
-  };
-
-  // Seed sample offline data for quick testing
-  const handleSeedOfflineDemo = () => {
-    const demoRows = [
-      {
-        tanggal: '2026-11-20',
-        namaPelanggan: 'Dewi Anggraini',
-        itemDesain: 'Blush Chrome Gradient',
-        nominal: 135000,
-        channel: 'Offline' as const,
-      },
-      {
-        tanggal: '2026-11-21',
-        namaPelanggan: 'Rina Kurnia',
-        itemDesain: 'French Modern Almond',
-        nominal: 150000,
-        channel: 'Offline' as const,
-      },
-      {
-        tanggal: '2026-11-22',
-        namaPelanggan: 'Natasya Putri',
-        itemDesain: 'Glazed Donut Nails',
-        nominal: 120000,
-        channel: 'Offline' as const,
-      },
-    ];
-
-    const batchId = `batch_${Date.now()}`;
-    const newItems: OfflineSaleItem[] = demoRows.map((row, idx) => ({
-      ...row,
-      id: `DNL-OFF-${Date.now().toString().slice(-4)}${String(idx + 1).padStart(2, '0')}`,
-      batchId,
-      batchFileName: 'sample_bazaar_jogja.xlsx',
-      createdAt: new Date().toISOString(),
-    }));
-
-    const totalBatchNominal = newItems.reduce((acc, curr) => acc + curr.nominal, 0);
-    const newBatch: OfflineBatch = {
-      batchId,
-      fileName: 'sample_bazaar_jogja.xlsx',
-      importedAt: new Date().toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      rowCount: newItems.length,
-      totalNominal: totalBatchNominal,
-    };
-
-    const updatedSales = [...newItems, ...offlineSales];
-    const updatedBatches = [newBatch, ...offlineBatches];
-
-    setOfflineSales(updatedSales);
-    setOfflineBatches(updatedBatches);
-    saveOfflineSales(updatedSales);
-    saveOfflineBatches(updatedBatches);
-
-    showToast(`Berhasil menambahkan 3 contoh data penjualan offline (${formatRupiah(totalBatchNominal)})!`);
   };
 
   // File Upload Handler (CSV / XLSX)
@@ -809,72 +737,57 @@ export default function AdminDashboardPage() {
     showToast(`Batch "${fileName}" berhasil dihapus.`);
   };
 
-  const isAdmin = currentRole === 'admin' || currentRole === 'owner' || currentUser?.role === 'admin' || currentUser?.role === 'owner';
-
-  if (isCheckingAuth) {
+  if (isAuthLoading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F5F2', fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 36, height: 36, border: '3px solid #ECE6E0', borderTopColor: '#F37338', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-          <p style={{ fontSize: 13, color: '#6B6B6B', fontWeight: 500 }}>Memuat Admin Panel dinail.co...</p>
-        </div>
+      <div
+        aria-busy="true"
+        aria-label="Memuat halaman"
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#F3F0EE',
+          fontFamily: 'var(--font-primary, Poppins, sans-serif)',
+        }}
+      >
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            border: '2.5px solid #E5E0DA',
+            borderTopColor: '#141413',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+          }}
+        />
       </div>
     );
   }
 
-  if (!isAdmin) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F5F2', padding: 24, fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
-        <div style={{ maxWidth: 480, width: '100%', background: '#FFFFFF', borderRadius: 16, border: '1px solid #ECE6E0', padding: 32, textAlign: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.06)' }}>
-          <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: 'rgba(243, 115, 56, 0.1)', color: '#F37338', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-          </div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#141413', marginBottom: 8 }}>Akses Terbatas: Khusus Administrator</h2>
-          <p style={{ fontSize: 14, color: '#6B6B6B', lineHeight: 1.5, marginBottom: 20 }}>
-            Akun Anda saat ini terdaftar sebagai <strong>{currentUser?.role || currentRole || 'Customer'}</strong> ({currentUser?.email || 'Belum Login'}). Halaman ini hanya dapat diakses oleh staf admin atau pemilik dinail.co.
-          </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link href="/" style={{ padding: '10px 18px', borderRadius: 10, backgroundColor: '#141413', color: '#FFFFFF', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
-              Kembali ke Beranda
-            </Link>
-            <Link href="/profil" style={{ padding: '10px 18px', borderRadius: 10, backgroundColor: '#F3F0EE', color: '#141413', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
-              Buka Profil Saya
-            </Link>
-          </div>
-          {process.env.NODE_ENV === 'development' && (
-            <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px dashed #ECE6E0' }}>
-              <span style={{ fontSize: 11, color: '#71717A', display: 'block', marginBottom: 8 }}>Mode Pengembangan (Development Only):</span>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => login('admin')}
-                style={{
-                  padding: '8px 18px',
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                  fontFamily: 'inherit',
-                }}
-              >
-                <span>Simulasikan Role Admin (Dev)</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+  if (!canAccessAdmin) {
+    notFound();
   }
 
   return (
-    <div className="overflow-x-hidden" style={{ background: '#F8F5F2', minHeight: '100vh', width: '100%', maxWidth: '100%', overflowX: 'hidden', display: 'flex', color: '#141413', fontFamily: 'var(--font-primary, Poppins, sans-serif)' }}>
+    <div
+      className="dashboard-shell min-h-screen lg:h-screen lg:overflow-hidden flex flex-col lg:flex-row"
+      style={{
+        background: '#F8F5F2',
+        minHeight: '100vh',
+        width: '100%',
+        maxWidth: '100%',
+        color: '#141413',
+        fontFamily: 'var(--font-primary, Poppins, sans-serif)',
+      }}
+    >
       {/* ── 1. SIDEBAR KIRI (Desktop >= 1024px) ── */}
       <aside
-        className="hidden lg:flex dashboard-sidebar-desktop"
+        className="hidden lg:flex lg:flex-col lg:h-screen lg:shrink-0 lg:sticky lg:top-0 overflow-y-auto dashboard-sidebar-desktop"
         style={{
           width: 240,
           minWidth: 240,
+          flexShrink: 0,
           background: '#FFFFFF',
           borderRight: '1px solid #ECE6E0',
           display: 'flex',
@@ -882,7 +795,7 @@ export default function AdminDashboardPage() {
           position: 'sticky',
           top: 0,
           height: '100vh',
-          overflow: 'hidden',
+          overflowY: 'auto',
           zIndex: 50,
         }}
       >
@@ -1029,7 +942,17 @@ export default function AdminDashboardPage() {
         </nav>
 
         {/* Footer Sidebar: Tombol Kembali ke Beranda */}
-        <div style={{ padding: '14px 12px 56px', borderTop: '1px solid #ECE6E0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div
+          className="mt-auto"
+          style={{
+            marginTop: 'auto',
+            padding: '14px 12px 20px',
+            borderTop: '1px solid #ECE6E0',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+          }}
+        >
           <Link
             href="/"
             style={{
@@ -1251,7 +1174,10 @@ export default function AdminDashboardPage() {
       </AnimatePresence>
 
       {/* ── 2. AREA KONTEN UTAMA ── */}
-      <main style={{ flex: 1, minWidth: 0, width: '100%', display: 'flex', flexDirection: 'column', background: '#F8F5F2' }}>
+      <main
+        className="dashboard-main-scroll flex-1 min-w-0 lg:h-screen lg:overflow-y-auto"
+        style={{ flex: 1, minWidth: 0, width: '100%', display: 'flex', flexDirection: 'column', background: '#F8F5F2' }}
+      >
         {/* Header Bar (Ringkas & Sticky di Mobile < 1024px, Utuh di Desktop >= 1024px) */}
         <div
           className="dashboard-header admin-header-bar"
@@ -1986,20 +1912,6 @@ export default function AdminDashboardPage() {
                     <IconDownload size={14} />
                     <span>Unduh Template CSV</span>
                   </button>
-
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={handleSeedOfflineDemo}
-                    style={{
-                      padding: '8px 18px',
-                      fontSize: 13,
-                      fontWeight: 500,
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    <span>+ Muat Contoh Data (Demo)</span>
-                  </button>
                 </div>
               </div>
 
@@ -2727,17 +2639,6 @@ function ReferenceDetailModal({
             }}
           >
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  backgroundColor: '#F37338',
-                  display: 'inline-block',
-                  flexShrink: 0,
-                }}
-                aria-hidden="true"
-              />
               <h4 style={{ fontSize: 13.5, fontWeight: 700, color: '#141413', margin: 0 }}>
                 Verifikasi Ukuran Kuku (Hasil AI)
               </h4>

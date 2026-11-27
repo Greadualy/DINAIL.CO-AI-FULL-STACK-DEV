@@ -1,6 +1,7 @@
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import OrderSteps from "@/components/OrderSteps";
+import FeaturedWorksCarousel from "@/components/FeaturedWorksCarousel";
 import TestimonialCarousel from "@/components/TestimonialCarousel";
 import LocationSection from "@/components/LocationSection";
 import Footer from "@/components/Footer";
@@ -11,6 +12,7 @@ export default function HomePage() {
       <Navbar />
       <HeroSection />
       <OrderSteps />
+      <FeaturedWorksCarousel />
       <TestimonialCarousel />
       <LocationSection />
       <Footer />

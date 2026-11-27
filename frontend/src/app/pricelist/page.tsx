@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
@@ -469,6 +469,378 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
   );
 }
 
+// SERIES DETAILS & COMPLIMENTARY TOOL KIT SECTION
+
+interface SeriesDetail {
+  id: 'basic' | 'classic' | 'luxury' | 'prestige';
+  tabLabel: string;
+  title: string;
+  tierTag: string;
+  description: ReactNode;
+  highlights: string[];
+  toolKitItems: string[];
+}
+
+const SERIES_DETAILS: SeriesDetail[] = [
+  {
+    id: 'basic',
+    tabLabel: 'Basic',
+    title: 'Basic Custom Premium Series',
+    tierTag: 'Basic Tier',
+    description: (
+      <>
+        Dirancang untuk tampilan simpel, bersih, dan <em>timeless</em> dengan warna polos serta gratis 2 <em>easy art</em>. Dibuat <em>handmade</em> secara kustom menggunakan gel berkualitas sehingga terasa ringan, halus, nyaman, dan <em>polished</em> untuk pemakaian sehari-hari. Dapat digunakan kembali (<em>reusable</em>) dengan kualitas setara salon dari rumah.
+      </>
+    ),
+    highlights: ['Warna Polos + Gratis 2 Easy Art', 'Handmade Gel Ringan', 'Reusable & Nyaman Harian'],
+    toolKitItems: [
+      '24 pcs Lem stiker',
+      '12 pcs Lem stiker premium',
+      '1 pcs Buffer',
+      '1 pcs Pendorong kutikula',
+      'Thank you card',
+      'Sticker eksklusif',
+      'Instruction card',
+    ],
+  },
+  {
+    id: 'classic',
+    tabLabel: 'Classic',
+    title: 'Classic Custom Premium Series',
+    tierTag: 'Classic Tier',
+    description: (
+      <>
+        Menghadirkan karakter klasik yang elegan dan berkelas dengan pilihan desain <em>cat eye</em>, <em>air brush</em>, <em>chrome</em>, serta <em>easy</em> hingga <em>very hard art</em> yang dapat dipadukan dengan aksesori. Diproduksi <em>handmade</em> dari gel berkualitas dengan detail rapi, proporsi seimbang, <em>timeless</em>, dan <em>reusable</em> untuk harian maupun momen spesial.
+      </>
+    ),
+    highlights: ['Cat Eye, Air Brush & Chrome', 'Easy hingga Very Hard Art', 'Termasuk Kotak Akrilik Eksklusif'],
+    toolKitItems: [
+      '24 pcs Lem stiker',
+      '12 pcs Lem stiker premium',
+      '1 pcs Buffer',
+      '1 pcs Pendorong kutikula',
+      'Kotak akrilik eksklusif',
+      'Thank you card',
+      'Sticker eksklusif',
+      'Guide card perawatan & pemakaian',
+    ],
+  },
+  {
+    id: 'luxury',
+    tabLabel: 'Luxury',
+    title: 'Luxury Custom Premium Series',
+    tierTag: 'Luxury Tier',
+    description: (
+      <>
+        Menawarkan pengalaman kustom premium yang elegan, <em>elevated</em>, dan <em>refined</em> secara <em>personalized</em>. Mencakup pilihan <em>cat eye</em>, <em>air brush</em>, <em>chrome</em>, <em>french</em>, <em>ombre</em>, hingga <em>hard art</em> dengan aksesori terkurasi. Dibuat <em>handmade</em> menggunakan gel berkualitas tinggi dengan struktur kuku kokoh namun ringan, <em>reusable</em>, dan ideal untuk acara formal maupun momen istimewa.
+      </>
+    ),
+    highlights: ['French, Ombre & Hard Art', 'Aksesori Terkurasi & Kokoh', 'Loyalty Card + Mystery Gift'],
+    toolKitItems: [
+      '24 pcs Lem stiker',
+      '12 pcs Lem stiker premium',
+      '1 pcs Buffer',
+      '1 pcs Pendorong kutikula',
+      'Kotak akrilik eksklusif',
+      'Thank you card',
+      'Loyalty card',
+      'Sticker eksklusif',
+      'Guide card perawatan & pemakaian',
+      'Special mystery gift',
+    ],
+  },
+  {
+    id: 'prestige',
+    tabLabel: 'Prestige',
+    title: 'Prestige Custom Premium Series',
+    tierTag: 'Prestige Tier',
+    description: (
+      <>
+        Tier tertinggi yang <em>ultra-personalized</em>, <em>bold</em>, dan <em>one of a kind</em>. Mencakup eksplorasi desain tanpa batas termasuk <em>advanced 3D design</em>, <em>complex charm arrangement</em>, <em>picture print on nails</em>, <em>freestyle</em>, hingga <em>mixed media art</em>. Diproduksi <em>fully handmade</em> dengan standar <em>artisan-level</em> dan material premium pilihan untuk detail ekstrem dan <em>finishing</em> setara salon <em>high-end</em> yang tetap <em>reusable</em>.
+      </>
+    ),
+    highlights: ['Advanced 3D & Complex Charm', 'Picture Print & Mixed Media', 'Artisan-Level High-End Finish'],
+    toolKitItems: [
+      '24 pcs Lem stiker',
+      '12 pcs Lem stiker premium',
+      '1 pcs Buffer',
+      '1 pcs Pendorong kutikula',
+      'Kotak akrilik eksklusif',
+      'Thank you card',
+      'Loyalty card',
+      'Sticker eksklusif',
+      'Guide card perawatan & pemakaian',
+      'Special mystery gift',
+    ],
+  },
+];
+
+function SeriesDetailsSection() {
+  const [activeSeriesId, setActiveSeriesId] = useState<SeriesDetail['id']>('basic');
+  const activeSeries =
+    SERIES_DETAILS.find((item) => item.id === activeSeriesId) ?? SERIES_DETAILS[0];
+
+  return (
+    <section
+      id="detail-series"
+      className="series-details-section my-14 sm:my-20"
+      style={{
+        backgroundColor: '#F3F0EE',
+        paddingLeft: 24,
+        paddingRight: 24,
+      }}
+    >
+      <div style={{ maxWidth: 1040, margin: '0 auto' }}>
+        {/* Section Header */}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <p
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              lineHeight: 1,
+              color: '#141413',
+              marginBottom: 14,
+            }}
+          >
+            DETAIL SERIES &amp; KELENGKAPAN
+          </p>
+          <RevealTitle
+            as="h2"
+            text="Kenali Perbedaan Setiap Series"
+            style={{
+              fontSize: 'clamp(26px, 4vw, 36px)',
+              fontWeight: 500,
+              letterSpacing: '-0.03em',
+              color: '#141413',
+              lineHeight: 1.08,
+              margin: '0 auto',
+            }}
+          />
+        </div>
+
+        {/* 4 Pill Tabs */}
+        <div
+          role="tablist"
+          aria-label="Pilihan Series dinail.co"
+          className="series-tabs-bar grid grid-cols-4 sm:flex sm:flex-wrap sm:justify-center gap-2 sm:gap-2.5"
+          style={{
+            marginBottom: 28,
+          }}
+        >
+          {SERIES_DETAILS.map((series) => {
+            const isActive = series.id === activeSeriesId;
+            return (
+              <button
+                key={series.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActiveSeriesId(series.id)}
+                className="series-tab-pill"
+                style={{
+                  backgroundColor: isActive ? '#141413' : '#FFFFFF',
+                  color: isActive ? '#FFFFFF' : '#141413',
+                  border: isActive ? '1px solid #141413' : '1px solid #EAE6E1',
+                  borderRadius: 9999,
+                  fontWeight: 600,
+                  letterSpacing: '-0.01em',
+                  cursor: 'pointer',
+                  transition:
+                    'background-color 0.22s ease, color 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease',
+                  boxShadow: isActive
+                    ? '0px 8px 20px rgba(20, 20, 19, 0.14)'
+                    : '0px 2px 6px rgba(20, 20, 19, 0.03)',
+                  fontFamily: 'inherit',
+                  textAlign: 'center',
+                }}
+              >
+                {series.tabLabel}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Main White Detail Card */}
+        <div
+          className="series-detail-card bg-white border border-[#EAE6E1] rounded-3xl p-6 sm:p-8 max-w-[1040px] mx-auto"
+          style={{
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #EAE6E1',
+            borderRadius: 24,
+            maxWidth: 1040,
+            margin: '0 auto',
+            boxShadow: '0px 8px 32px 0px rgba(20, 20, 19, 0.04)',
+          }}
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeSeries.id}
+              role="tabpanel"
+              aria-label={activeSeries.title}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              className="series-detail-grid grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10"
+            >
+              {/* Kolom Kiri (lg:col-span-7): Deskripsi Series */}
+              <div
+                className="series-detail-left lg:col-span-7"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  minWidth: 0,
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 'fit-content',
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    color: '#CF4500',
+                    backgroundColor: '#FFF5F0',
+                    border: '1px solid #F9D5C2',
+                    borderRadius: 9999,
+                    padding: '4px 12px',
+                    marginBottom: 14,
+                  }}
+                >
+                  {activeSeries.tierTag}
+                </span>
+
+                <h3
+                  style={{
+                    fontSize: 'clamp(22px, 2.8vw, 28px)',
+                    fontWeight: 600,
+                    letterSpacing: '-0.025em',
+                    lineHeight: 1.2,
+                    color: '#141413',
+                    marginBottom: 16,
+                  }}
+                >
+                  {activeSeries.title}
+                </h3>
+
+                <p
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 400,
+                    lineHeight: 1.75,
+                    color: '#3F3E3C',
+                    marginBottom: 22,
+                  }}
+                >
+                  {activeSeries.description}
+                </p>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    paddingTop: 18,
+                    borderTop: '1px solid #F0ECE7',
+                  }}
+                >
+                  {activeSeries.highlights.map((tag) => (
+                    <span
+                      key={tag}
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: '#262627',
+                        backgroundColor: '#F3F0EE',
+                        borderRadius: 9999,
+                        padding: '6px 13px',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Kolom Kanan (lg:col-span-5): Complimentary Tool Kit & Exclusive Packaging */}
+              <div
+                className="series-toolkit-box lg:col-span-5 bg-[#FAF9F7] border border-[#EAE6E1] rounded-2xl p-5"
+                style={{
+                  backgroundColor: '#FAF9F7',
+                  border: '1px solid #EAE6E1',
+                  borderRadius: 16,
+                  minWidth: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    letterSpacing: '-0.01em',
+                    lineHeight: 1.4,
+                    color: '#141413',
+                    marginBottom: 14,
+                    paddingBottom: 12,
+                    borderBottom: '1px solid #EAE6E1',
+                  }}
+                >
+                  Complimentary Nail Application Tool Kit &amp; Exclusive Packaging
+                </p>
+
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 9,
+                  }}
+                >
+                  {activeSeries.toolKitItems.map((item) => (
+                    <li
+                      key={item}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 10,
+                        fontSize: 13.5,
+                        lineHeight: 1.45,
+                        color: '#262627',
+                      }}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#F37338"
+                        strokeWidth="2.1"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ flexShrink: 0, marginTop: 2 }}
+                        aria-hidden="true"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // SHAPE GUIDE COMPONENT
 
 function ShapeGuideSection() {
@@ -509,17 +881,6 @@ function ShapeGuideSection() {
               gap: '10px',
             }}
           >
-            <span
-              style={{
-                width: '11px',
-                height: '11px',
-                borderRadius: '50%',
-                backgroundColor: '#F37338',
-                flexShrink: 0,
-                display: 'inline-block',
-              }}
-              aria-hidden="true"
-            />
             PANDUAN BENTUK &amp; PANJANG KUKU
           </p>
           <RevealTitle
@@ -549,11 +910,10 @@ function ShapeGuideSection() {
 
         {/* Shape Grid */}
         <div
-          className="shape-guide-grid grid-cols-3 gap-2.5"
+          className="shape-guide-grid grid grid-cols-1 sm:grid-cols-2 lg:grid lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-5 max-w-[960px] mx-auto"
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-            gap: 20,
+            maxWidth: 960,
+            margin: '0 auto',
           }}
         >
           {SHAPE_OPTIONS.map((s, i) => {
@@ -671,17 +1031,6 @@ function ShapeGuideSection() {
                 gap: '10px',
               }}
             >
-              <span
-                style={{
-                  width: '10px',
-                  height: '10px',
-                  borderRadius: '50%',
-                  backgroundColor: '#F37338',
-                  flexShrink: 0,
-                  display: 'inline-block',
-                }}
-                aria-hidden="true"
-              />
               INFO BENTUK KUKU
             </p>
             <p
@@ -758,17 +1107,6 @@ export default function PriceListPage() {
                 gap: '10px',
               }}
             >
-              <span
-                style={{
-                  width: '11px',
-                  height: '11px',
-                  borderRadius: '50%',
-                  backgroundColor: '#F37338',
-                  flexShrink: 0,
-                  display: 'inline-block',
-                }}
-                aria-hidden="true"
-              />
               PRICE LIST &amp; TIER KUSTOMISASI
             </p>
 
@@ -809,7 +1147,7 @@ export default function PriceListPage() {
         className="pricelist-grid-section"
         style={{
           paddingTop: 0,
-          paddingBottom: 72,
+          paddingBottom: 16,
           paddingLeft: 24,
           paddingRight: 24,
         }}
@@ -899,6 +1237,9 @@ export default function PriceListPage() {
           </AnimatePresence>
         </div>
       </section>
+
+      {/* DETAIL & KELENGKAPAN SERIES */}
+      <SeriesDetailsSection />
 
       {/*SHAPE & LENGTH GUIDE*/}
       <ShapeGuideSection />

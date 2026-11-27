@@ -17,16 +17,22 @@ export interface RoleUser {
   savedMeasurements?: unknown;
 }
 
-const MOCK_USERS: Record<string, RoleUser> = {
-  customer: { role: 'customer', name: 'Sari Dewi', email: 'sari@example.com' },
-  admin: { role: 'admin', name: 'Admin Dinail', email: 'admin@dinail.co' },
-  owner: { role: 'owner', name: 'Owner Dinail', email: 'owner@dinail.co' },
-  user: { role: 'customer', name: 'Sari Dewi', email: 'sari@example.com' },
+const CUSTOMER_FALLBACK_USER: RoleUser = {
+  role: 'customer',
+  name: 'Sari Dewi',
+  email: 'sari@example.com',
 };
 
 const generateUserId = (): string => {
   const num = Math.floor(1000 + Math.random() * 9000);
   return `DNL-USR-${num}`;
+};
+
+const normalizeDatabaseRole = (rawRole: unknown): Exclude<UserRole, 'guest' | 'user'> => {
+  const value = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : '';
+  if (value === 'owner') return 'owner';
+  if (value === 'admin') return 'admin';
+  return 'customer';
 };
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
@@ -35,6 +41,7 @@ interface RoleContextType {
   currentUser: RoleUser | null;
   currentRole: UserRole;
   userId: string | null;
+  isAuthLoading: boolean;
   login: (role: Exclude<UserRole, 'guest'>) => void;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
@@ -48,13 +55,13 @@ const RoleContext = createContext<RoleContextType | undefined>(undefined);
 export function RoleProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<RoleUser | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Sync token to Backend Supabase
+  // Sync Firebase ID token to Backend Database to obtain authoritative role
   const syncWithBackend = async (firebaseUser: FirebaseUser) => {
     try {
       const idToken = await firebaseUser.getIdToken();
-      console.log('[RoleContext] Syncing user to backend:', firebaseUser.email);
 
       const response = await fetch(`${BACKEND_URL}/api/v1/auth/sync`, {
         method: 'POST',
@@ -70,11 +77,10 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       });
 
       const data = await response.json();
-      console.log('[RoleContext] Sync response:', response.status, data);
 
       if (response.ok && data.success && data.data) {
         const dbUser = data.data;
-        const role = (dbUser.role as UserRole) || 'customer';
+        const role = normalizeDatabaseRole(dbUser.role);
         const mappedUser: RoleUser = {
           role,
           name: dbUser.name || firebaseUser.displayName || 'Customer',
@@ -86,15 +92,17 @@ export function RoleProvider({ children }: { children: ReactNode }) {
           savedMeasurements: dbUser.savedMeasurements,
         };
         setCurrentUser(mappedUser);
-        const uid = dbUser.id ? `DNL-USR-${dbUser.id.substring(0, 4).toUpperCase()}` : generateUserId();
+        const uid = dbUser.id
+          ? `DNL-USR-${String(dbUser.id).substring(0, 4).toUpperCase()}`
+          : generateUserId();
         setUserId(uid);
-        localStorage.setItem('dinail_role', role);
         localStorage.setItem('dinail_userId', uid);
       } else {
         throw new Error(data.message || 'Gagal sinkronisasi data dengan backend.');
       }
     } catch (error) {
-      console.warn('[RoleContext] Backend sync unavailable, using Firebase profile:', error);
+      console.warn('[RoleContext] Backend sync unavailable, defaulting to customer role:', error);
+      // Never elevate role when backend database verification is unavailable
       const fallbackUser: RoleUser = {
         role: 'customer',
         name: firebaseUser.displayName || 'Customer',
@@ -102,27 +110,53 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         photoUrl: firebaseUser.photoURL,
       };
       setCurrentUser(fallbackUser);
+      const existing = localStorage.getItem('dinail_userId');
+      const uid = existing || generateUserId();
+      if (!existing) localStorage.setItem('dinail_userId', uid);
+      setUserId(uid);
     }
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        await syncWithBackend(firebaseUser);
-      } else {
-        const savedRole = localStorage.getItem('dinail_role') as UserRole | null;
-        if (savedRole && savedRole !== 'guest' && MOCK_USERS[savedRole]) {
-          setCurrentUser(MOCK_USERS[savedRole]);
-          setUserId(localStorage.getItem('dinail_userId') || generateUserId());
+      try {
+        if (firebaseUser) {
+          await syncWithBackend(firebaseUser);
+        } else {
+          // Clear any legacy elevated role cache; unauthenticated visitors are strictly guest
+          // (Only allow restoring a local non-privileged customer session if explicitly saved)
+          const savedRole = localStorage.getItem('dinail_role');
+          if (savedRole === 'customer' || savedRole === 'user') {
+            if (isMounted) {
+              setCurrentUser(CUSTOMER_FALLBACK_USER);
+              setUserId(localStorage.getItem('dinail_userId') || generateUserId());
+            }
+          } else {
+            localStorage.removeItem('dinail_role');
+            if (isMounted) {
+              setCurrentUser(null);
+              setUserId(null);
+            }
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setIsAuthLoading(false);
         }
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const loginWithGoogle = async () => {
     try {
+      setIsAuthLoading(true);
       const result = await signInWithPopup(auth, googleProvider);
       if (result.user) {
         await syncWithBackend(result.user);
@@ -131,13 +165,16 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     } catch (error: unknown) {
       console.error('Google Sign-In failed:', error);
       alert('Login Google dibatalkan atau popup ditutup.');
+    } finally {
+      setIsAuthLoading(false);
     }
   };
 
-  const login = (role: Exclude<UserRole, 'guest'>) => {
-    const user = MOCK_USERS[role];
-    setCurrentUser(user);
-    localStorage.setItem('dinail_role', role);
+  // Client-side login never grants privileged roles (admin/owner come strictly from database)
+  const login = (_role: Exclude<UserRole, 'guest'>) => {
+    void _role;
+    setCurrentUser(CUSTOMER_FALLBACK_USER);
+    localStorage.setItem('dinail_role', 'customer');
 
     const existing = localStorage.getItem('dinail_userId');
     const uid = existing || generateUserId();
@@ -145,6 +182,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('dinail_userId', uid);
     }
     setUserId(uid);
+    setIsAuthLoading(false);
     setIsModalOpen(false);
   };
 
@@ -169,6 +207,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         currentUser,
         currentRole: currentUser?.role ?? 'guest',
         userId,
+        isAuthLoading,
         login,
         loginWithGoogle,
         logout,

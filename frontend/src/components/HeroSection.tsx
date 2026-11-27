@@ -58,17 +58,6 @@ export default function HeroSection() {
               gap: '10px',
             }}
           >
-            <span
-              style={{
-                width: '11px',
-                height: '11px',
-                borderRadius: '50%',
-                backgroundColor: '#F37338',
-                flexShrink: 0,
-                display: 'inline-block',
-              }}
-              aria-hidden="true"
-            />
             DINAIL.CO ARTISTRY
           </p>
 

@@ -113,24 +113,6 @@ const TEXT_COLUMNS: Array<{
   links: Array<{ label: string; href: string; external?: boolean }>;
 }> = [
     {
-      header: 'TENTANG DINAIL.CO',
-      links: [
-        { label: 'Siapa Kami', href: '/#home' },
-        { label: 'Proses Pembuatan', href: '/#alur-pemesanan' },
-        { label: 'Kualitas & Bahan', href: '/pricelist' },
-        { label: 'Cerita Pelanggan', href: '/#testimoni' },
-      ],
-    },
-    {
-      header: 'MENU & LAYANAN',
-      links: [
-        { label: 'Home', href: '/' },
-        { label: 'Catalog Desain', href: '/catalog' },
-        { label: 'Price List', href: '/pricelist' },
-        { label: 'Profil & Konsultasi', href: '/profil' },
-      ],
-    },
-    {
       header: 'MARKETPLACE & KANAL',
       links: [
         { label: 'Shopee Official Store', href: 'https://shopee.co.id/dinail.co', external: true },
@@ -189,31 +171,86 @@ export default function Footer() {
       }}
     >
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        {/* 1. Compact Conversational Headline */}
-        <h2
-          style={{
-            fontSize: '23px',
-            fontWeight: 500,
-            lineHeight: 1.35,
-            letterSpacing: '-0.02em',
-            color: '#FFFFFF',
-            marginBottom: '48px',
-          }}
-        >
-          Kami selalu siap membantu
-          <br />
-          perjalanan nail art impianmu.
-        </h2>
-
-        {/* 2. 4-Column Navigation Grid */}
+        {/* 1. Balanced 3-Column Layout: Brand Intro + 2 Essential Columns */}
         <div
           className="footer-columns-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-            gap: '40px 32px',
+            gridTemplateColumns: 'minmax(260px, 1.35fr) minmax(210px, 1fr) minmax(210px, 1fr)',
+            gap: '40px 48px',
+            alignItems: 'start',
           }}
         >
+          {/* Brand Logo & Short Editorial Headline */}
+          <div className="footer-brand-col">
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                marginBottom: 16,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  letterSpacing: '-0.03em',
+                  color: '#FFFFFF',
+                }}
+              >
+                dinail
+              </span>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  backgroundColor: '#F37338',
+                  display: 'inline-block',
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  letterSpacing: '-0.03em',
+                  color: '#FFFFFF',
+                }}
+              >
+                co
+              </span>
+            </div>
+
+            <h2
+              style={{
+                fontSize: '21px',
+                fontWeight: 500,
+                lineHeight: 1.4,
+                letterSpacing: '-0.02em',
+                color: '#FFFFFF',
+                marginBottom: '12px',
+                maxWidth: 340,
+              }}
+            >
+              Kami selalu siap membantu perjalanan nail art impianmu.
+            </h2>
+
+            <p
+              style={{
+                fontSize: '13.5px',
+                fontWeight: 400,
+                lineHeight: 1.65,
+                color: '#B8B4AE',
+                maxWidth: 340,
+              }}
+            >
+              Custom press-on nails buatan tangan dari Yogyakarta — presisi sesuai ukuran jari, nyaman, dan reusable.
+            </p>
+          </div>
+
           {/* Kolom 1: BUTUH BANTUAN? (With 18px White Outline SVG Icons) */}
           <div>
             <p style={columnTitleStyle}>BUTUH BANTUAN?</p>
@@ -413,36 +450,6 @@ export default function Footer() {
                 }}
               >
                 Panduan Ukuran
-              </Link>
-              <span aria-hidden="true" style={{ opacity: 0.7 }}>
-                ·
-              </span>
-              <Link
-                href="/admin"
-                style={{ color: '#F37338', textDecoration: 'none', fontWeight: 600, transition: 'opacity 0.2s' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = '0.75';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '1';
-                }}
-              >
-                Panel Admin
-              </Link>
-              <span aria-hidden="true" style={{ opacity: 0.7 }}>
-                ·
-              </span>
-              <Link
-                href="/owner"
-                style={{ color: '#F37338', textDecoration: 'none', fontWeight: 600, transition: 'opacity 0.2s' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = '0.75';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '1';
-                }}
-              >
-                Owner Panel
               </Link>
             </div>
           </div>

@@ -74,8 +74,8 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={poppins.className}
-        style={{ fontFamily: "var(--font-poppins), 'Poppins', sans-serif" }}
+        className={`${poppins.className} ${poppins.variable}`}
+        suppressHydrationWarning
       >
         <ScrollToTop />
         <RoleProvider>
