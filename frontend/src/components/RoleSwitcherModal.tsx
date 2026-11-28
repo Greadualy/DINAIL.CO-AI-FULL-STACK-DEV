@@ -1,12 +1,23 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useRole } from '@/context/RoleContext';
 
 export default function RoleSwitcherModal() {
   const { isModalOpen, closeModal, login, loginWithGoogle } = useRole();
 
-  if (!isModalOpen) return null;
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeModal();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, closeModal]);
 
   const handleLogin = () => {
     login('user');
@@ -17,38 +28,53 @@ export default function RoleSwitcherModal() {
   };
 
   return (
-    /* 1. Overlay Popup */
-    <div
-      onClick={closeModal}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 10000,
-        backgroundColor: 'rgba(20, 20, 19, 0.45)',
-        backdropFilter: 'blur(6px)',
-        WebkitBackdropFilter: 'blur(6px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px',
-      }}
-    >
-      {/* 2. Container Card Popup */}
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '36px',
-          padding: '32px 28px',
-          maxWidth: '420px',
-          width: '100%',
-          boxShadow: '0px 24px 48px rgba(0, 0, 0, 0.12)',
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          boxSizing: 'border-box',
-        }}
-      >
+    <AnimatePresence>
+      {isModalOpen && (
+        /* 1. Overlay Popup */
+        <motion.div
+          key="dinail-auth-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Login ke dinail.co"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
+          onClick={closeModal}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            backgroundColor: 'rgba(20, 20, 19, 0.45)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          {/* 2. Container Card Popup */}
+          <motion.div
+            key="dinail-auth-modal-card"
+            initial={{ opacity: 0, scale: 0.96, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '36px',
+              padding: '32px 28px',
+              maxWidth: '420px',
+              width: '100%',
+              boxShadow: '0px 24px 48px rgba(0, 0, 0, 0.12)',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              boxSizing: 'border-box',
+            }}
+          >
         {/* Tombol Tutup Silang (Close Button) */}
         <button
           onClick={closeModal}
@@ -317,7 +343,9 @@ export default function RoleSwitcherModal() {
         >
           By continuing you agree to our Terms and Privacy
         </div>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

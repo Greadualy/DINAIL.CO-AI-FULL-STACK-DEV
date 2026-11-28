@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRole } from '@/context/RoleContext';
 
 // OUTLINE SVG ICONS (18px, White) FOR KOLOM 1
 
@@ -103,7 +104,7 @@ const HELP_LINKS: Array<{
   external?: boolean;
 }> = [
     { label: 'Konsultasi via WhatsApp', href: 'https://wa.me/6281234567890', icon: 'chat', external: true },
-    { label: 'Panduan Cek Ukuran Kuku', href: '/profil#ukuran', icon: 'ruler' },
+    { label: 'Panduan Cek Ukuran Kuku', href: '/profil?tab=ukuran', icon: 'ruler' },
     { label: 'Lokasi Studio Yogyakarta', href: '/#lokasi', icon: 'pin' },
     { label: 'Pertanyaan Umum (FAQ)', href: '/pricelist', icon: 'faq' },
   ];
@@ -137,8 +138,16 @@ const SOCIAL_ITEMS: Array<{
 // FOOTER COMPONENT
 
 export default function Footer() {
+  const { currentUser, openModal } = useRole();
   const [localeOpen, setLocaleOpen] = useState(false);
   const [selectedLocale, setSelectedLocale] = useState('ID (Indonesia)');
+
+  const handleProtectedLinkClick = (e: React.MouseEvent, href: string) => {
+    if (href.startsWith('/profil') && !currentUser) {
+      e.preventDefault();
+      openModal({ redirectAfterLogin: href });
+    }
+  };
 
   const linkBaseStyle: React.CSSProperties = {
     color: '#FFFFFF',
@@ -298,6 +307,7 @@ export default function Footer() {
                     ) : (
                       <Link
                         href={item.href}
+                        onClick={(e) => handleProtectedLinkClick(e, item.href)}
                         style={flexStyle}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.opacity = '0.72';
@@ -411,6 +421,7 @@ export default function Footer() {
             >
               <Link
                 href="/profil"
+                onClick={(e) => handleProtectedLinkClick(e, '/profil')}
                 style={{ color: '#FFFFFF', textDecoration: 'none', transition: 'opacity 0.2s' }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.opacity = '0.72';
@@ -440,7 +451,8 @@ export default function Footer() {
                 ·
               </span>
               <Link
-                href="/profil#ukuran"
+                href="/profil?tab=ukuran"
+                onClick={(e) => handleProtectedLinkClick(e, '/profil?tab=ukuran')}
                 style={{ color: '#FFFFFF', textDecoration: 'none', transition: 'opacity 0.2s' }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.opacity = '0.72';

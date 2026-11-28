@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion, type Variants } from 'motion/react';
 import { useRole } from '@/context/RoleContext';
 import { DINAIL_ASSETS } from '@/constants/assets';
@@ -69,7 +70,7 @@ const STEPS: OrderStep[] = [
     title: 'Pengecekan Ukuran Kuku via Foto',
     desc: 'Unggah foto jari dan kukumu sesuai panduan di website agar tim kami dapat mengukur size kuku secara akurat.',
     img: DINAIL_ASSETS.stepImages[2],
-    href: '/profil#ukuran',
+    href: '/profil?tab=ukuran',
     imagePosition: '50% 50%',
     imageScale: 1.1,
   },
@@ -78,7 +79,7 @@ const STEPS: OrderStep[] = [
     title: 'Mengisi Data Diri',
     desc: 'Lengkapi profil dan data diri pemesan untuk pencatatan kartu ukuran dan pengiriman.',
     img: DINAIL_ASSETS.stepImages[3],
-    href: '/profil#konsultasi',
+    href: '/profil?tab=akun',
     imagePosition: '50% 25%',
   },
   {
@@ -86,7 +87,7 @@ const STEPS: OrderStep[] = [
     title: 'Mengisi Form Konsultasi',
     desc: 'Pilih bentuk kuku, panjang, warna, serta unggah referensi desain pada form konsultasi yang tersedia.',
     img: DINAIL_ASSETS.stepImages[4],
-    href: '/profil#konsultasi',
+    href: '/profil?tab=konsultasi',
     imagePosition: '50% 45%',
   },
   {
@@ -94,7 +95,7 @@ const STEPS: OrderStep[] = [
     title: 'Menunggu Konfirmasi Admin',
     desc: 'Admin dinail.co akan memverifikasi ukuran kuku dan detail desainmu, lalu memperbarui status pesanan di akunmu.',
     img: DINAIL_ASSETS.stepImages[5],
-    href: '/profil#status-tracker',
+    href: '/profil?tab=konsultasi',
     imagePosition: '50% 52%',
   },
   {
@@ -102,7 +103,7 @@ const STEPS: OrderStep[] = [
     title: 'ACC & Pemesanan di Shopee',
     desc: 'Jika konsultasi telah di-ACC oleh Admin, tombol checkout khusus akan aktif dan kamu dapat menyelesaikan pemesanan melalui Shopee.',
     img: DINAIL_ASSETS.stepImages[6],
-    href: '/profil#status-tracker',
+    href: '/profil?tab=konsultasi',
     imagePosition: '55% 60%',
   },
 ];
@@ -151,14 +152,14 @@ function RowOrbitalArc({ colInRow }: { colInRow: number }) {
 
 function StepCard({ step, colInRow }: { step: typeof STEPS[0]; colInRow: number }) {
   const isMiddleCol = colInRow === 1; // Langkah 02 (col 1) & Langkah 05 (col 1)
-  const { openModal } = useRole();
+  const { currentUser, openModal } = useRole();
   const [isHovered, setIsHovered] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
 
   const handleStepClick = (e: React.MouseEvent) => {
-    if (step.num === '01') {
+    if (!currentUser) {
       e.preventDefault();
-      openModal();
+      openModal({ redirectAfterLogin: step.href });
     }
   };
 
@@ -368,12 +369,12 @@ function StepCard({ step, colInRow }: { step: typeof STEPS[0]; colInRow: number 
 }
 
 function MobileStepCard({ step, index }: { step: typeof STEPS[0]; index: number }) {
-  const { openModal } = useRole();
+  const { currentUser, openModal } = useRole();
 
   const handleStepClick = (e: React.MouseEvent) => {
-    if (step.num === '01') {
+    if (!currentUser) {
       e.preventDefault();
-      openModal();
+      openModal({ redirectAfterLogin: step.href });
     }
   };
 
@@ -551,7 +552,16 @@ function MobileStepCard({ step, index }: { step: typeof STEPS[0]; index: number 
 }
 
 export default function OrderSteps() {
-  const { openModal } = useRole();
+  const { currentUser, openModal } = useRole();
+  const router = useRouter();
+
+  const handleStartFlow = () => {
+    if (currentUser) {
+      router.push('/profil');
+    } else {
+      openModal({ redirectAfterLogin: '/profil' });
+    }
+  };
 
   return (
     <section
@@ -609,7 +619,7 @@ export default function OrderSteps() {
 
           <button
             type="button"
-            onClick={openModal}
+            onClick={handleStartFlow}
             className="btn-primary"
             style={{
               padding: '13px 28px',

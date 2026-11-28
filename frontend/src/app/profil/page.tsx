@@ -3,11 +3,12 @@
 import { useState, useRef, Suspense, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Skeleton from '@/components/Skeleton';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { useRole } from '@/context/RoleContext';
 import { DINAIL_ASSETS } from '@/constants/assets';
 import { auth } from '@/config/firebase';
@@ -936,6 +937,7 @@ const AI_SCAN_STEPS = [
 function UkuranKukuTab({ userId }: { userId?: string | null }) {
   const [nailData, setNailData] = useState<NailSizeData>(DEFAULT_NAIL_DATA);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [pendingRemoveSlot, setPendingRemoveSlot] = useState<'fourFingers' | 'thumb' | null>(null);
 
   // State Pengukuran Otomatis via AI (2 Foto: 4 Jari + Ibu Jari)
   const [isGuideOpen, setIsGuideOpen] = useState(true);
@@ -1849,7 +1851,7 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
                     >
                       <button
                         type="button"
-                        onClick={() => handleRemoveSlotPhoto(slot.key)}
+                        onClick={() => setPendingRemoveSlot(slot.key)}
                         title="Hapus Foto"
                         aria-label="Hapus Foto"
                         className="w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-sm transition-colors"
@@ -2390,6 +2392,26 @@ function UkuranKukuTab({ userId }: { userId?: string | null }) {
           </button>
         </div>
       </div>
+
+      {/* Modal Konfirmasi Hapus Foto Ukuran Kuku */}
+      <ConfirmModal
+        isOpen={Boolean(pendingRemoveSlot)}
+        title="Hapus Foto Ukuran Kuku?"
+        description={
+          pendingRemoveSlot === 'fourFingers'
+            ? 'Foto 4 jari beserta hasil analisis AI sementara akan dihapus. Anda dapat mengunggah foto baru kapan saja.'
+            : 'Foto ibu jari beserta hasil analisis AI sementara akan dihapus. Anda dapat mengunggah foto baru kapan saja.'
+        }
+        confirmText="Ya, Hapus Foto"
+        variant="danger"
+        onConfirm={() => {
+          if (pendingRemoveSlot) {
+            handleRemoveSlotPhoto(pendingRemoveSlot);
+          }
+          setPendingRemoveSlot(null);
+        }}
+        onCancel={() => setPendingRemoveSlot(null)}
+      />
     </div>
   );
 }
@@ -2436,6 +2458,8 @@ function KonsultasiTab({
   // Modals state
   const [submittedOrder, setSubmittedOrder] = useState<OrderCard | null>(null);
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<OrderCard | null>(null);
+  const [isConfirmRemoveRefOpen, setIsConfirmRemoveRefOpen] = useState(false);
+  const [isConfirmSubmitOpen, setIsConfirmSubmitOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -2675,6 +2699,7 @@ function KonsultasiTab({
     })();
 
     // Open confirmation modal
+    setIsConfirmSubmitOpen(false);
     setSubmittedOrder(newOrder);
 
     // Reset form
@@ -2943,7 +2968,7 @@ function KonsultasiTab({
                     </div>
                     <button
                       type="button"
-                      onClick={handleRemoveRefPhoto}
+                      onClick={() => setIsConfirmRemoveRefOpen(true)}
                       style={{
                         background: 'none',
                         border: 'none',
@@ -3049,7 +3074,11 @@ function KonsultasiTab({
                   opacity: (!savedNailData || !customerName.trim()) ? 0.5 : 1,
                   cursor: (!savedNailData || !customerName.trim()) ? 'not-allowed' : 'pointer',
                 }}
-                onClick={handleSubmitNew}
+                onClick={() => {
+                  if (savedNailData && customerName.trim()) {
+                    setIsConfirmSubmitOpen(true);
+                  }
+                }}
                 disabled={!savedNailData || !customerName.trim()}
               >
                 Kirim Pengajuan Konsultasi
@@ -3058,6 +3087,31 @@ function KonsultasiTab({
           </div>
         </div>
       )}
+
+      {/* Modal Konfirmasi Hapus Foto Referensi */}
+      <ConfirmModal
+        isOpen={isConfirmRemoveRefOpen}
+        title="Hapus Foto Referensi?"
+        description="Foto referensi desain yang telah diunggah akan dihapus dari formulir pengajuan ini."
+        confirmText="Ya, Hapus"
+        variant="danger"
+        onConfirm={() => {
+          handleRemoveRefPhoto();
+          setIsConfirmRemoveRefOpen(false);
+        }}
+        onCancel={() => setIsConfirmRemoveRefOpen(false)}
+      />
+
+      {/* Modal Konfirmasi Pengajuan Final Konsultasi */}
+      <ConfirmModal
+        isOpen={isConfirmSubmitOpen}
+        title="Kirim Pengajuan Konsultasi?"
+        description={`Pengajuan desain atas nama ${customerName.trim() || 'Customer'}${savedNailData ? ` dengan ukuran ${formatNailSizeSummary(savedNailData)}` : ''} akan langsung dikirim ke tim nail artist dinail.co untuk ditinjau.`}
+        confirmText="Ya, Kirim Pengajuan"
+        variant="primary"
+        onConfirm={handleSubmitNew}
+        onCancel={() => setIsConfirmSubmitOpen(false)}
+      />
 
       {/* Dropdown Filter Status (Khusus Mobile & Tablet < 1024px) */}
       <div
@@ -4021,13 +4075,33 @@ function AkunTab({
 type MobileProfileView = 'hub' | ActiveMenu;
 
 function ProfileContent() {
+  const router = useRouter();
   const { currentUser, userId, isAuthLoading, logout, openModal } = useRole();
   const dbRole = !isAuthLoading ? currentUser?.role?.toLowerCase() : null;
-  const isAdminOrOwner = dbRole === 'admin' || dbRole === 'owner';
+  const isAdminRole = dbRole === 'admin';
   const isOwnerRole = dbRole === 'owner';
+  const hasDashboardAccess = isAdminRole || isOwnerRole;
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const initialDesignParam = searchParams.get('design') || undefined;
+  const hasTriggeredAuthModalRef = useRef(false);
+
+  // Jika user belum login membuka /profil langsung (atau baru logout), buka Login Pop-up Modal global.
+  // Jika modal ditutup tanpa login, arahkan kembali ke Home ('/').
+  useEffect(() => {
+    if (currentUser) {
+      hasTriggeredAuthModalRef.current = false;
+      return;
+    }
+    if (!isAuthLoading && !hasTriggeredAuthModalRef.current) {
+      hasTriggeredAuthModalRef.current = true;
+      openModal({
+        onDismissWithoutLogin: () => {
+          router.replace('/');
+        },
+      });
+    }
+  }, [isAuthLoading, currentUser, openModal, router]);
 
   // Tentukan tab awal untuk Desktop (default 'akun', atau sesuai parameter URL ?tab= / ?design=)
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(() => {
@@ -4056,6 +4130,8 @@ function ProfileContent() {
     city: 'Yogyakarta',
   });
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -4148,10 +4224,21 @@ function ProfileContent() {
 
   const handleMenuClick = (key: string) => {
     if (key === 'keluar') {
-      logout();
+      setIsLogoutConfirmOpen(true);
       return;
     }
     setActiveMenu(key as ActiveMenu);
+  };
+
+  const handleConfirmedLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      setIsLogoutConfirmOpen(false);
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const mobileStatusTiles: {
@@ -4212,37 +4299,31 @@ function ProfileContent() {
     <div style={{ background: '#F3F0EE', minHeight: '100vh', overflowX: 'clip' }}>
       <Navbar />
 
-      {/* State: Belum Login (Desktop & Mobile) */}
+      {/* State: Belum Login / Memuat Auth — Global Login Pop-up Modal ditampilkan di atas halaman */}
       {!currentUser && (
-        <main className="profil-main-container" style={{ maxWidth: 1180, margin: '0 auto', padding: '120px 20px 80px' }}>
-          <div
-            style={{
-              textAlign: 'center',
-              padding: '70px 20px',
-              backgroundColor: '#FFFFFF',
-              borderRadius: 24,
-              border: '1px solid #EAE6E1',
-              maxWidth: 540,
-              margin: '0 auto',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16, color: '#F37338' }}>
-              <IconUser size={44} />
-            </div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: '#141413', marginBottom: 10 }}>
-              Login untuk Mengakses Profil
-            </h2>
-            <p style={{ fontSize: 14, color: '#696969', marginBottom: 28, lineHeight: 1.5 }}>
-              Masuk dengan akun Anda untuk melihat ID User, menyimpan ukuran kuku, dan memantau riwayat pesanan.
-            </p>
-            <button
-              className="btn-primary"
-              style={{ padding: '13px 34px', fontSize: 15 }}
-              onClick={openModal}
-            >
-              Masuk / Daftar Sekarang
-            </button>
-          </div>
+        <main
+          aria-busy={isAuthLoading || undefined}
+          style={{
+            minHeight: 'calc(100vh - 220px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '120px 20px 80px',
+          }}
+        >
+          {isAuthLoading && (
+            <div
+              aria-label="Memuat halaman"
+              style={{
+                width: 32,
+                height: 32,
+                border: '2.5px solid #E5E0DA',
+                borderTopColor: '#141413',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+              }}
+            />
+          )}
         </main>
       )}
 
@@ -4658,8 +4739,8 @@ function ProfileContent() {
                     </span>
                   </button>
 
-                  {/* Tautan Dashboard Khusus Role Admin/Owner */}
-                  {isAdminOrOwner && (
+                  {/* Tautan Dashboard Khusus Role Admin/Owner (Hanya 1 Link Sesuai Role) */}
+                  {isAdminRole && (
                     <Link
                       href="/admin"
                       style={{
@@ -4706,7 +4787,7 @@ function ProfileContent() {
                   {/* Baris 4: Keluar */}
                   <button
                     type="button"
-                    onClick={logout}
+                    onClick={() => setIsLogoutConfirmOpen(true)}
                     style={{
                       width: '100%',
                       padding: '14px 0',
@@ -4990,7 +5071,7 @@ function ProfileContent() {
               {/* Quick links ke Catalog & Price List (disembunyikan di mobile < 1024px) */}
               <div
                 className={
-                  isAdminOrOwner
+                  hasDashboardAccess
                     ? 'profil-quicklinks-box'
                     : 'profil-quicklinks-box profil-quicklinks-desktop-only'
                 }
@@ -5024,7 +5105,7 @@ function ProfileContent() {
                 >
                   Cek Daftar Harga
                 </Link>
-                {isAdminOrOwner && (
+                {isAdminRole && (
                   <Link
                     href="/admin"
                     style={{
@@ -5093,6 +5174,18 @@ function ProfileContent() {
         profile={profile}
         onClose={() => setIsEditProfileOpen(false)}
         onSave={handleSaveProfile}
+      />
+
+      {/* Modal Konfirmasi Logout */}
+      <ConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        title="Keluar dari Akun?"
+        description="Anda harus masuk kembali untuk mengakses profil, ukuran kuku, dan riwayat konsultasi."
+        confirmText="Ya, Keluar"
+        variant="danger"
+        isLoading={isLoggingOut}
+        onConfirm={handleConfirmedLogout}
+        onCancel={() => setIsLogoutConfirmOpen(false)}
       />
 
       {/* Notifikasi Toast Berhasil */}

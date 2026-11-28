@@ -96,7 +96,7 @@ export default function Navbar() {
     if (currentUser) {
       router.push('/profil');
     } else {
-      openModal();
+      openModal({ redirectAfterLogin: '/profil' });
     }
   };
 

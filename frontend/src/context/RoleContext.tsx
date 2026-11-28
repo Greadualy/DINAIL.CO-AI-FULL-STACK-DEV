@@ -1,6 +1,15 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  ReactNode,
+} from 'react';
+import { useRouter } from 'next/navigation';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth, googleProvider } from '@/config/firebase';
 
@@ -15,6 +24,11 @@ export interface RoleUser {
   id?: string;
   savedSizePreset?: string | null;
   savedMeasurements?: unknown;
+}
+
+export interface OpenAuthModalOptions {
+  redirectAfterLogin?: string;
+  onDismissWithoutLogin?: () => void;
 }
 
 const CUSTOMER_FALLBACK_USER: RoleUser = {
@@ -46,20 +60,24 @@ interface RoleContextType {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   isModalOpen: boolean;
-  openModal: () => void;
+  openModal: (options?: string | OpenAuthModalOptions) => void;
   closeModal: () => void;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [currentUser, setCurrentUser] = useState<RoleUser | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  const pendingRedirectRef = useRef<string | null>(null);
+  const onDismissRef = useRef<(() => void) | null>(null);
+
   // Sync Firebase ID token to Backend Database to obtain authoritative role
-  const syncWithBackend = async (firebaseUser: FirebaseUser) => {
+  const syncWithBackend = useCallback(async (firebaseUser: FirebaseUser) => {
     try {
       const idToken = await firebaseUser.getIdToken();
 
@@ -115,7 +133,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       if (!existing) localStorage.setItem('dinail_userId', uid);
       setUserId(uid);
     }
-  };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -152,15 +170,25 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       isMounted = false;
       unsubscribe();
     };
-  }, []);
+  }, [syncWithBackend]);
 
-  const loginWithGoogle = async () => {
+  const completeLoginSuccess = useCallback(() => {
+    const target = pendingRedirectRef.current;
+    pendingRedirectRef.current = null;
+    onDismissRef.current = null;
+    setIsModalOpen(false);
+    if (target) {
+      router.push(target);
+    }
+  }, [router]);
+
+  const loginWithGoogle = useCallback(async () => {
     try {
       setIsAuthLoading(true);
       const result = await signInWithPopup(auth, googleProvider);
       if (result.user) {
         await syncWithBackend(result.user);
-        setIsModalOpen(false);
+        completeLoginSuccess();
       }
     } catch (error: unknown) {
       console.error('Google Sign-In failed:', error);
@@ -168,25 +196,28 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsAuthLoading(false);
     }
-  };
+  }, [syncWithBackend, completeLoginSuccess]);
 
   // Client-side login never grants privileged roles (admin/owner come strictly from database)
-  const login = (_role: Exclude<UserRole, 'guest'>) => {
-    void _role;
-    setCurrentUser(CUSTOMER_FALLBACK_USER);
-    localStorage.setItem('dinail_role', 'customer');
+  const login = useCallback(
+    (_role: Exclude<UserRole, 'guest'>) => {
+      void _role;
+      setCurrentUser(CUSTOMER_FALLBACK_USER);
+      localStorage.setItem('dinail_role', 'customer');
 
-    const existing = localStorage.getItem('dinail_userId');
-    const uid = existing || generateUserId();
-    if (!existing) {
-      localStorage.setItem('dinail_userId', uid);
-    }
-    setUserId(uid);
-    setIsAuthLoading(false);
-    setIsModalOpen(false);
-  };
+      const existing = localStorage.getItem('dinail_userId');
+      const uid = existing || generateUserId();
+      if (!existing) {
+        localStorage.setItem('dinail_userId', uid);
+      }
+      setUserId(uid);
+      setIsAuthLoading(false);
+      completeLoginSuccess();
+    },
+    [completeLoginSuccess]
+  );
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await signOut(auth);
     } catch (err) {
@@ -196,10 +227,31 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     setUserId(null);
     localStorage.removeItem('dinail_role');
     localStorage.removeItem('dinail_userId');
-  };
+  }, []);
 
-  const openModal = () => setIsModalOpen(true);
-  const closeModal = () => setIsModalOpen(false);
+  const openModal = useCallback((options?: string | OpenAuthModalOptions) => {
+    if (typeof options === 'string') {
+      pendingRedirectRef.current = options;
+      onDismissRef.current = null;
+    } else if (options && typeof options === 'object') {
+      pendingRedirectRef.current = options.redirectAfterLogin ?? null;
+      onDismissRef.current = options.onDismissWithoutLogin ?? null;
+    } else {
+      pendingRedirectRef.current = null;
+      onDismissRef.current = null;
+    }
+    setIsModalOpen(true);
+  }, []);
+
+  const closeModal = useCallback(() => {
+    setIsModalOpen(false);
+    const dismissCallback = onDismissRef.current;
+    pendingRedirectRef.current = null;
+    onDismissRef.current = null;
+    if (dismissCallback) {
+      dismissCallback();
+    }
+  }, []);
 
   return (
     <RoleContext.Provider
@@ -225,4 +277,9 @@ export function useRole() {
   const ctx = useContext(RoleContext);
   if (!ctx) throw new Error('useRole must be used inside RoleProvider');
   return ctx;
+}
+
+export function useAuthModal() {
+  const { isModalOpen, openModal, closeModal, currentUser, isAuthLoading } = useRole();
+  return { isModalOpen, openModal, closeModal, currentUser, isAuthLoading };
 }

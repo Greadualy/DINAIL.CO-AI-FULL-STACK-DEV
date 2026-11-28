@@ -1,15 +1,33 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import Skeleton from '@/components/Skeleton';
 import { useRole } from '@/context/RoleContext';
+import OrderStatusView from '@/components/dashboard/OrderStatusView';
+import OfflineSalesImportView from '@/components/dashboard/OfflineSalesImportView';
+import {
+  type AdminOrder,
+  type OfflineSaleItem,
+  type OfflineBatch,
+  formatRupiah,
+  parseNominal,
+  normalizeOrderStatus,
+  fetchConsultationsWithAuth,
+  loadAllConsultations,
+  loadOfflineSales,
+  loadOfflineBatches,
+  IconClipboard,
+  IconUploadCloud,
+  IconRefresh,
+  IconCheck,
+} from '@/components/dashboard/dashboardShared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type OwnerMenu = 'penjualan' | 'insight';
+type OwnerMenu = 'penjualan' | 'insight' | 'orderan' | 'import';
 type TimeRange = '7d' | '30d' | 'bulan' | 'semua';
 
 interface DailySeries {
@@ -34,23 +52,7 @@ interface SizeShare {
   pct: number;
 }
 
-// ─── localStorage Keys ───────────────────────────────────────────────────────
-
-const LS_KEY_OFFLINE_SALES = 'dinail_offline_sales';
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatRupiah(n: number): string {
-  return 'Rp ' + n.toLocaleString('id-ID');
-}
-
-function parseNominal(v: string | number | undefined): number {
-  if (typeof v === 'number') return isNaN(v) ? 0 : v;
-  if (!v) return 0;
-  const c = String(v).replace(/[^0-9]/g, '');
-  const n = parseInt(c, 10);
-  return isNaN(n) ? 0 : n;
-}
 
 function isApproved(status: string): boolean {
   const s = (status || '').toLowerCase();
@@ -119,53 +121,6 @@ function parseTransactionDate(input: string | undefined): Date | null {
   const parsed = new Date(trimmed);
   if (!isNaN(parsed.getTime())) return startOfLocalDay(parsed);
   return null;
-}
-
-// ─── Data Loading ─────────────────────────────────────────────────────────────
-
-interface OfflineSaleItem {
-  id: string;
-  tanggal: string;
-  nominal: number;
-  itemDesain?: string;
-}
-
-interface AdminOrder {
-  consultationId: string;
-  status: string;
-  submittedAt: string;
-  estimasiHarga: string;
-  serviceType?: string;
-  nailSizeSummary?: string;
-}
-
-function loadAllConsultations(): AdminOrder[] {
-  if (typeof window === 'undefined') return [];
-  const results: AdminOrder[] = [];
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('dinail_consultations_')) {
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          const list = JSON.parse(raw);
-          if (Array.isArray(list)) {
-            list.forEach((o) => { if (o && o.consultationId) results.push(o); });
-          }
-        }
-      }
-    }
-  } catch { }
-  return results;
-}
-
-function loadOfflineSales(): OfflineSaleItem[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(LS_KEY_OFFLINE_SALES);
-    if (raw) return JSON.parse(raw);
-  } catch { }
-  return [];
 }
 
 // ─── Demo / Fallback Data ─────────────────────────────────────────────────────
@@ -711,33 +666,133 @@ function ForecastChart({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function OwnerDashboardPage() {
+  const router = useRouter();
   const { currentUser, isAuthLoading } = useRole();
   const normalizedRole = currentUser?.role?.toLowerCase();
+  const isAdminRole = Boolean(currentUser && normalizedRole === 'admin');
   const canAccessOwner = Boolean(currentUser && normalizedRole === 'owner');
   const [activeMenu, setActiveMenu] = useState<OwnerMenu>('penjualan');
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // SSR-safe state hydrated from localStorage after mount
+  // SSR-safe state hydrated from localStorage + backend API after mount
   const [consultations, setConsultations] = useState<AdminOrder[]>([]);
   const [offlineSales, setOfflineSales] = useState<OfflineSaleItem[]>([]);
+  const [offlineBatches, setOfflineBatches] = useState<OfflineBatch[]>([]);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 3200);
+  }, []);
+
+  const syncConsultationsFromBackend = useCallback(async () => {
+    const merged = await fetchConsultationsWithAuth();
+    if (merged) {
+      setConsultations(merged);
+    }
+  }, []);
+
+  // Redirect strictly if an Admin user tries to open /owner
+  useEffect(() => {
+    if (!isAuthLoading && isAdminRole) {
+      router.replace('/admin');
+    }
+  }, [isAuthLoading, isAdminRole, router]);
 
   useEffect(() => {
     if (isAuthLoading || !canAccessOwner) return;
+    let isMounted = true;
     const hydrateTimer = setTimeout(() => {
       setConsultations(loadAllConsultations());
       setOfflineSales(loadOfflineSales());
+      setOfflineBatches(loadOfflineBatches());
     }, 0);
+    fetchConsultationsWithAuth().then((merged) => {
+      if (isMounted && merged) {
+        setConsultations(merged);
+      }
+    });
     loadingTimerRef.current = setTimeout(() => {
       setIsLoading(false);
     }, 400);
     return () => {
+      isMounted = false;
       clearTimeout(hydrateTimer);
       if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+      if (refreshNoticeTimerRef.current) clearTimeout(refreshNoticeTimerRef.current);
     };
   }, [isAuthLoading, canAccessOwner]);
+
+  useEffect(() => {
+    if (isAuthLoading || !canAccessOwner) return;
+    if (activeMenu !== 'orderan' && activeMenu !== 'penjualan') return;
+    let isMounted = true;
+    fetchConsultationsWithAuth().then((merged) => {
+      if (isMounted && merged) {
+        setConsultations(merged);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [activeMenu, isAuthLoading, canAccessOwner]);
+
+  const refreshData = useCallback(async () => {
+    if (isRefreshing) return;
+    if (refreshNoticeTimerRef.current) {
+      clearTimeout(refreshNoticeTimerRef.current);
+      refreshNoticeTimerRef.current = null;
+    }
+    setIsRefreshing(true);
+    setRefreshNotice('loading');
+    const minDelay = new Promise((resolve) => setTimeout(resolve, 650));
+    setConsultations(loadAllConsultations());
+    setOfflineSales(loadOfflineSales());
+    setOfflineBatches(loadOfflineBatches());
+    try {
+      await Promise.all([syncConsultationsFromBackend(), minDelay]);
+    } finally {
+      setIsRefreshing(false);
+      setRefreshNotice('done');
+      refreshNoticeTimerRef.current = setTimeout(() => {
+        setRefreshNotice('idle');
+        refreshNoticeTimerRef.current = null;
+      }, 2200);
+    }
+  }, [isRefreshing, syncConsultationsFromBackend]);
+
+  const handleOrderSaved = useCallback(
+    async (updatedOrder: AdminOrder) => {
+      setConsultations((prev) =>
+        prev.map((item) =>
+          item.consultationId === updatedOrder.consultationId ? updatedOrder : item
+        )
+      );
+      await syncConsultationsFromBackend();
+    },
+    [syncConsultationsFromBackend]
+  );
+
+  const handleOfflineDataChange = useCallback(
+    (nextSales: OfflineSaleItem[], nextBatches: OfflineBatch[]) => {
+      setOfflineSales(nextSales);
+      setOfflineBatches(nextBatches);
+    },
+    []
+  );
+
+  const antrianCount = useMemo(
+    () => consultations.filter((o) => normalizeOrderStatus(o.status) === 'Antrian').length,
+    [consultations]
+  );
 
   const handleTimeRangeChange = (nextRange: TimeRange) => {
     if (nextRange === timeRange) return;
@@ -898,7 +953,38 @@ export default function OwnerDashboardPage() {
     { label: 'Semua Waktu', value: 'semua' },
   ];
 
-  if (isAuthLoading) {
+  const executiveNavItems: { key: OwnerMenu; label: string; icon: React.ReactNode }[] = [
+    { key: 'penjualan', label: 'Dashboard Penjualan', icon: <IconTrendLine /> },
+    { key: 'insight', label: 'Insight Data Science', icon: <IconTarget /> },
+  ];
+
+  const operationalNavItems: { key: OwnerMenu; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { key: 'orderan', label: 'Status Orderan', icon: <IconClipboard size={17} />, badge: antrianCount },
+    { key: 'import', label: 'Import Penjualan Offline', icon: <IconUploadCloud size={17} /> },
+  ];
+
+  const isOperationalTab = activeMenu === 'orderan' || activeMenu === 'import';
+
+  const headerMeta: Record<OwnerMenu, { title: string; subtitle: string }> = {
+    penjualan: {
+      title: 'Dashboard Penjualan',
+      subtitle: 'Monitoring omzet & performa Online + Offline',
+    },
+    insight: {
+      title: 'Insight Data Science',
+      subtitle: 'Analisis & prediksi tim Data Science',
+    },
+    orderan: {
+      title: 'Kelola Status Orderan',
+      subtitle: 'Tinjau referensi desain kuku customer, kelola status, dan kirimkan feedback',
+    },
+    import: {
+      title: 'Import Penjualan Offline',
+      subtitle: 'Unggah laporan penjualan offline dari event/bazaar dalam format CSV atau Excel (.xlsx)',
+    },
+  };
+
+  if (isAuthLoading || isAdminRole) {
     return (
       <div
         aria-busy="true"
@@ -980,12 +1066,22 @@ export default function OwnerDashboardPage() {
           </span>
         </div>
 
-        {/* Nav */}
-        <nav style={{ padding: '14px 12px', flex: 1 }}>
-          {([
-            { key: 'penjualan', label: 'Dashboard Penjualan', icon: <IconTrendLine /> },
-            { key: 'insight', label: 'Insight Data Science', icon: <IconTarget /> },
-          ] as { key: OwnerMenu; label: string; icon: React.ReactNode }[]).map((item) => {
+        {/* Nav (4 Menu dalam 2 Grup: Executive & Operasional) */}
+        <nav style={{ padding: '14px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: '0.09em',
+              textTransform: 'uppercase',
+              color: '#9B978F',
+              padding: '4px 14px 6px',
+              display: 'block',
+            }}
+          >
+            Executive
+          </span>
+          {executiveNavItems.map((item) => {
             const isActive = activeMenu === item.key;
             return (
               <button
@@ -1016,13 +1112,80 @@ export default function OwnerDashboardPage() {
                   />
                 )}
                 <span style={{ position: 'relative', zIndex: 1, color: isActive ? '#F37338' : '#9B978F', flexShrink: 0, display: 'flex' }}>{item.icon}</span>
-                <span style={{ position: 'relative', zIndex: 1 }}>{item.label}</span>
+                <span style={{ position: 'relative', zIndex: 1, flex: 1 }}>{item.label}</span>
+              </button>
+            );
+          })}
+
+          <div style={{ height: 1, backgroundColor: '#ECE6E0', margin: '10px 10px 12px' }} />
+
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: '0.09em',
+              textTransform: 'uppercase',
+              color: '#9B978F',
+              padding: '2px 14px 6px',
+              display: 'block',
+            }}
+          >
+            Operasional
+          </span>
+          {operationalNavItems.map((item) => {
+            const isActive = activeMenu === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setActiveMenu(item.key)}
+                style={{
+                  ...sidebarItemBase,
+                  position: 'relative',
+                  color: isActive ? '#141413' : '#6B6760',
+                  background: 'transparent',
+                  fontWeight: isActive ? 600 : 500,
+                  marginBottom: 4,
+                }}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="owner-sidebar-active"
+                    transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: 8,
+                      backgroundColor: '#F3F0EE',
+                      borderLeft: '3px solid #F37338',
+                      zIndex: 0,
+                    }}
+                  />
+                )}
+                <span style={{ position: 'relative', zIndex: 1, color: isActive ? '#F37338' : '#9B978F', flexShrink: 0, display: 'flex' }}>{item.icon}</span>
+                <span style={{ position: 'relative', zIndex: 1, flex: 1 }}>{item.label}</span>
+                {typeof item.badge === 'number' && item.badge > 0 && (
+                  <span
+                    style={{
+                      position: 'relative',
+                      zIndex: 1,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      backgroundColor: '#F37338',
+                      color: '#FFFFFF',
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                    }}
+                  >
+                    {item.badge}
+                  </span>
+                )}
               </button>
             );
           })}
         </nav>
 
-        {/* Footer links */}
+        {/* Footer links: Hanya Kembali ke Beranda */}
         <div
           className="mt-auto"
           style={{
@@ -1035,18 +1198,11 @@ export default function OwnerDashboardPage() {
           }}
         >
           <Link
-            href="/admin"
-            style={{ ...sidebarItemBase, color: '#6B6760', textDecoration: 'none', fontSize: 13, display: 'flex' }}
-          >
-            <span style={{ color: '#9B978F', flexShrink: 0 }}><IconUsers /></span>
-            Panel Admin
-          </Link>
-          <Link
             href="/"
             style={{ ...sidebarItemBase, color: '#6B6760', textDecoration: 'none', fontSize: 13, display: 'flex' }}
           >
-            <span style={{ color: '#9B978F', flexShrink: 0 }}><IconArrowLeft /></span>
-            Kembali ke Beranda
+            <span style={{ color: '#9B978F', flexShrink: 0, display: 'flex' }}><IconArrowLeft /></span>
+            <span>Kembali ke Beranda</span>
           </Link>
         </div>
       </aside>
@@ -1143,11 +1299,21 @@ export default function OwnerDashboardPage() {
                 </button>
               </div>
 
-              <nav style={{ padding: '14px 12px', flex: 1 }}>
-                {([
-                  { key: 'penjualan', label: 'Dashboard Penjualan', icon: <IconTrendLine /> },
-                  { key: 'insight', label: 'Insight Data Science', icon: <IconTarget /> },
-                ] as { key: OwnerMenu; label: string; icon: React.ReactNode }[]).map((item) => {
+              <nav style={{ padding: '14px 12px', flex: 1, overflowY: 'auto' }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '0.09em',
+                    textTransform: 'uppercase',
+                    color: '#9B978F',
+                    padding: '4px 14px 6px',
+                    display: 'block',
+                  }}
+                >
+                  Executive
+                </span>
+                {executiveNavItems.map((item) => {
                   const isActive = activeMenu === item.key;
                   return (
                     <button
@@ -1167,7 +1333,61 @@ export default function OwnerDashboardPage() {
                       }}
                     >
                       <span style={{ color: isActive ? '#F37338' : '#9B978F', flexShrink: 0, display: 'flex' }}>{item.icon}</span>
-                      <span>{item.label}</span>
+                      <span style={{ flex: 1 }}>{item.label}</span>
+                    </button>
+                  );
+                })}
+
+                <div style={{ height: 1, backgroundColor: '#ECE6E0', margin: '10px 10px 12px' }} />
+
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '0.09em',
+                    textTransform: 'uppercase',
+                    color: '#9B978F',
+                    padding: '2px 14px 6px',
+                    display: 'block',
+                  }}
+                >
+                  Operasional
+                </span>
+                {operationalNavItems.map((item) => {
+                  const isActive = activeMenu === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setActiveMenu(item.key);
+                        setMobileDrawerOpen(false);
+                      }}
+                      style={{
+                        ...sidebarItemBase,
+                        color: isActive ? '#141413' : '#6B6760',
+                        background: isActive ? '#F3F0EE' : 'transparent',
+                        borderLeft: isActive ? '3px solid #F37338' : '3px solid transparent',
+                        fontWeight: isActive ? 600 : 500,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <span style={{ color: isActive ? '#F37338' : '#9B978F', flexShrink: 0, display: 'flex' }}>{item.icon}</span>
+                      <span style={{ flex: 1 }}>{item.label}</span>
+                      {typeof item.badge === 'number' && item.badge > 0 && (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            backgroundColor: '#F37338',
+                            color: '#FFFFFF',
+                            padding: '2px 8px',
+                            borderRadius: 12,
+                          }}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -1175,20 +1395,12 @@ export default function OwnerDashboardPage() {
 
               <div style={{ padding: '14px 12px 28px', borderTop: '1px solid #EAE6E1', display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <Link
-                  href="/admin"
-                  onClick={() => setMobileDrawerOpen(false)}
-                  style={{ ...sidebarItemBase, color: '#6B6760', textDecoration: 'none', fontSize: 13, display: 'flex' }}
-                >
-                  <span style={{ color: '#9B978F', flexShrink: 0 }}><IconUsers /></span>
-                  Panel Admin
-                </Link>
-                <Link
                   href="/"
                   onClick={() => setMobileDrawerOpen(false)}
                   style={{ ...sidebarItemBase, color: '#6B6760', textDecoration: 'none', fontSize: 13, display: 'flex' }}
                 >
-                  <span style={{ color: '#9B978F', flexShrink: 0 }}><IconArrowLeft /></span>
-                  Kembali ke Beranda
+                  <span style={{ color: '#9B978F', flexShrink: 0, display: 'flex' }}><IconArrowLeft /></span>
+                  <span>Kembali ke Beranda</span>
                 </Link>
               </div>
             </motion.aside>
@@ -1203,7 +1415,11 @@ export default function OwnerDashboardPage() {
       >
         {/* Header (Ringkas & Sticky di Mobile < 1024px, Utuh di Desktop >= 1024px) */}
         <div
-          className="dashboard-header flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3"
+          className={
+            isOperationalTab
+              ? 'dashboard-header admin-header-bar flex flex-row lg:items-center lg:justify-between gap-3'
+              : 'dashboard-header flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3'
+          }
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -1241,115 +1457,217 @@ export default function OwnerDashboardPage() {
               </svg>
             </button>
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontSize: 16.5, fontWeight: 700, color: '#141413', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
-                {activeMenu === 'penjualan' ? 'Dashboard Penjualan' : 'Insight Data Science'}
+              <h1 style={{ fontSize: 16.5, fontWeight: 700, color: '#141413', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {headerMeta[activeMenu].title}
               </h1>
-              <p style={{ fontSize: 11.5, color: '#9B978F', margin: '2px 0 0', lineHeight: 1.35 }}>
-                {activeMenu === 'penjualan' ? 'Monitoring omzet & performa Online + Offline' : 'Analisis & prediksi tim Data Science'}
+              <p
+                className={isOperationalTab ? 'admin-header-subtitle' : undefined}
+                style={{ fontSize: 11.5, color: '#9B978F', margin: '2px 0 0', lineHeight: 1.35 }}
+              >
+                {headerMeta[activeMenu].subtitle}
               </p>
             </div>
           </div>
 
-          {/* Dropdown Filter Periode (Khusus Mobile & Tablet < 1024px) */}
-          <div
-            className="block lg:hidden owner-range-dropdown-mobile relative w-full"
-            style={{ position: 'relative', width: '100%' }}
-          >
-            <select
-              aria-label="Pilih Periode Penjualan"
-              value={timeRange}
-              onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange)}
-              className="dashboard-select-mobile w-full appearance-none bg-white border border-[#EAE6E1] rounded-xl px-3.5 py-2.5 pr-9 text-[13px] font-medium text-[#141413]"
-              style={{
-                width: '100%',
-                appearance: 'none',
-                WebkitAppearance: 'none',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #EAE6E1',
-                borderRadius: 12,
-                padding: '10px 36px 10px 14px',
-                fontSize: 13,
-                fontWeight: 500,
-                color: '#141413',
-                fontFamily: 'inherit',
-                cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              {timeRangePills.map((p) => (
-                <option key={`mobile-range-opt-${p.value}`} value={p.value}>
-                  Periode: {p.label}
-                </option>
-              ))}
-            </select>
-            <span
-              className="pointer-events-none"
-              style={{
-                position: 'absolute',
-                right: 12,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: '#6B6760',
-                pointerEvents: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-              }}
-              aria-hidden="true"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </span>
-          </div>
-
-          {/* Time Range Filter Pills (Khusus Desktop >= 1024px — Utuh) */}
-          <div className="hidden lg:inline-flex owner-range-bar scrollbar-hidden" style={{ display: 'flex', gap: 4, background: '#F3F0EE', borderRadius: 8, padding: 4 }}>
-            {timeRangePills.map((p) => {
-              const isSelected = timeRange === p.value;
-              return (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() => handleTimeRangeChange(p.value)}
+          {isOperationalTab ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              <button
+                type="button"
+                className="btn-secondary admin-refresh-btn px-3 py-1.5 text-[12px] lg:px-[18px] lg:py-2 lg:text-[13px]"
+                onClick={refreshData}
+                disabled={isRefreshing}
+                title="Perbarui Data"
+                style={{
+                  padding: '8px 18px',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  fontFamily: 'inherit',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span
+                  className={isRefreshing ? 'animate-spin' : undefined}
                   style={{
-                    position: 'relative',
-                    padding: '5px 12px',
-                    borderRadius: 6,
-                    border: 'none',
-                    fontSize: 12,
-                    fontWeight: isSelected ? 600 : 400,
-                    cursor: 'pointer',
-                    background: 'transparent',
-                    color: isSelected ? '#141413' : '#9B978F',
-                    fontFamily: 'inherit',
-                    transition: 'color 0.15s ease',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    animation: isRefreshing ? 'spin 0.7s linear infinite' : undefined,
                   }}
                 >
-                  {isSelected && (
-                    <motion.div
-                      layoutId="owner-range-active"
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                  <IconRefresh size={14} />
+                </span>
+                <span>{isRefreshing ? 'Memperbarui...' : 'Muat Ulang'}</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Dropdown Filter Periode (Khusus Mobile & Tablet < 1024px) */}
+              <div
+                className="block lg:hidden owner-range-dropdown-mobile relative w-full"
+                style={{ position: 'relative', width: '100%' }}
+              >
+                <select
+                  aria-label="Pilih Periode Penjualan"
+                  value={timeRange}
+                  onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange)}
+                  className="dashboard-select-mobile w-full appearance-none bg-white border border-[#EAE6E1] rounded-xl px-3.5 py-2.5 pr-9 text-[13px] font-medium text-[#141413]"
+                  style={{
+                    width: '100%',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #EAE6E1',
+                    borderRadius: 12,
+                    padding: '10px 36px 10px 14px',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: '#141413',
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                    outline: 'none',
+                  }}
+                >
+                  {timeRangePills.map((p) => (
+                    <option key={`mobile-range-opt-${p.value}`} value={p.value}>
+                      Periode: {p.label}
+                    </option>
+                  ))}
+                </select>
+                <span
+                  className="pointer-events-none"
+                  style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: '#6B6760',
+                    pointerEvents: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                  }}
+                  aria-hidden="true"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </span>
+              </div>
+
+              {/* Time Range Filter Pills (Khusus Desktop >= 1024px — Utuh) */}
+              <div className="hidden lg:inline-flex owner-range-bar scrollbar-hidden" style={{ display: 'flex', gap: 4, background: '#F3F0EE', borderRadius: 8, padding: 4 }}>
+                {timeRangePills.map((p) => {
+                  const isSelected = timeRange === p.value;
+                  return (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => handleTimeRangeChange(p.value)}
                       style={{
-                        position: 'absolute',
-                        inset: 0,
+                        position: 'relative',
+                        padding: '5px 12px',
                         borderRadius: 6,
-                        backgroundColor: '#FFFFFF',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                        zIndex: 0,
+                        border: 'none',
+                        fontSize: 12,
+                        fontWeight: isSelected ? 600 : 400,
+                        cursor: 'pointer',
+                        background: 'transparent',
+                        color: isSelected ? '#141413' : '#9B978F',
+                        fontFamily: 'inherit',
+                        transition: 'color 0.15s ease',
                       }}
-                    />
-                  )}
-                  <span style={{ position: 'relative', zIndex: 1 }}>{p.label}</span>
-                </button>
-              );
-            })}
-          </div>
+                    >
+                      {isSelected && (
+                        <motion.div
+                          layoutId="owner-range-active"
+                          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            borderRadius: 6,
+                            backgroundColor: '#FFFFFF',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                            zIndex: 0,
+                          }}
+                        />
+                      )}
+                      <span style={{ position: 'relative', zIndex: 1 }}>{p.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
 
+        {/* Pil Notifikasi Status Muat Ulang (Alur 3 Tahap) */}
+        <AnimatePresence>
+          {refreshNotice !== 'idle' && (
+            <motion.div
+              key="owner-refresh-notice-pill"
+              role="status"
+              aria-live="polite"
+              initial={{ opacity: 0, y: -10, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.96 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              style={{
+                position: 'fixed',
+                top: 20,
+                left: '50%',
+                x: '-50%',
+                zIndex: 10002,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '9px 18px',
+                borderRadius: 9999,
+                backgroundColor: '#141413',
+                color: '#FFFFFF',
+                fontSize: 12.5,
+                fontWeight: 500,
+                boxShadow: '0 8px 24px rgba(20, 20, 19, 0.18)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+              }}
+            >
+              {refreshNotice === 'loading' ? (
+                <>
+                  <span
+                    className="animate-spin"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#F37338',
+                      animation: 'spin 0.7s linear infinite',
+                    }}
+                  >
+                    <IconRefresh size={14} />
+                  </span>
+                  <span>Memuat data...</span>
+                </>
+              ) : (
+                <>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#22C55E',
+                    }}
+                  >
+                    <IconCheck size={14} />
+                  </span>
+                  <span>Data berhasil diperbarui.</span>
+                </>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Page body */}
-        <div className="dashboard-body" style={{ flex: 1, padding: '28px 32px', overflowY: 'auto' }}>
+        <div className="dashboard-body" style={{ flex: 1, padding: '28px 32px 60px', overflowY: 'auto' }}>
           <AnimatePresence mode="wait">
-            {activeMenu === 'penjualan' ? (
+            {activeMenu === 'penjualan' && (
               <motion.div
                 key="owner-tab-penjualan"
                 initial={{ opacity: 0, y: 8 }}
@@ -1359,7 +1677,9 @@ export default function OwnerDashboardPage() {
               >
                 <PenjualanTab kpi={kpi} dailySeries={dailySeries} timeRange={timeRange} isLoading={isLoading} />
               </motion.div>
-            ) : (
+            )}
+
+            {activeMenu === 'insight' && (
               <motion.div
                 key="owner-tab-insight"
                 initial={{ opacity: 0, y: 8 }}
@@ -1370,9 +1690,71 @@ export default function OwnerDashboardPage() {
                 <InsightTab forecastSeries={forecastSeries} isLoading={isLoading} />
               </motion.div>
             )}
+
+            {activeMenu === 'orderan' && (
+              <motion.div
+                key="owner-tab-orderan"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+              >
+                <OrderStatusView
+                  orders={consultations}
+                  isLoading={isLoading || isRefreshing}
+                  onOrderSaved={handleOrderSaved}
+                  onShowToast={showToast}
+                  layoutIdPrefix="owner"
+                />
+              </motion.div>
+            )}
+
+            {activeMenu === 'import' && (
+              <motion.div
+                key="owner-tab-import"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+              >
+                <OfflineSalesImportView
+                  offlineSales={offlineSales}
+                  offlineBatches={offlineBatches}
+                  onOfflineDataChange={handleOfflineDataChange}
+                  onShowToast={showToast}
+                />
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
       </main>
+
+      {/* ── Toast Notification ── */}
+      {toastMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            zIndex: 10003,
+            background: '#18181B',
+            color: '#FFFFFF',
+            padding: '12px 20px',
+            borderRadius: 12,
+            boxShadow: '0 8px 24px rgba(24, 24, 27, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          <span style={{ color: '#22C55E' }}>
+            <IconCheck size={16} />
+          </span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 }

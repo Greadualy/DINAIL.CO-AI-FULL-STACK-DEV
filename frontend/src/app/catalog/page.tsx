@@ -8,6 +8,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import RevealTitle from '@/components/RevealTitle';
 import Skeleton from '@/components/Skeleton';
+import { useRole } from '@/context/RoleContext';
 import {
   MAIN_CATEGORIES,
   CATALOG_DESIGNS,
@@ -18,6 +19,7 @@ import {
 // PAGE COMPONENT
 
 export default function CatalogPage() {
+  const { currentUser, openModal } = useRole();
   const [activeCategory, setActiveCategory] = useState<MainCategory>('Semua');
   const [previewItem, setPreviewItem] = useState<CatalogDesignItem | null>(null);
   const [isTierDropdownOpen, setIsTierDropdownOpen] = useState(false);
@@ -69,7 +71,15 @@ export default function CatalogPage() {
   );
 
   const buildConsultHref = (item: CatalogDesignItem) =>
-    `/profil?design=${encodeURIComponent(item.name)}&category=${encodeURIComponent(item.category)}#konsultasi`;
+    `/profil?tab=konsultasi&design=${encodeURIComponent(item.name)}&category=${encodeURIComponent(item.category)}`;
+
+  const handleProtectedConsultClick = (e: React.MouseEvent, href: string) => {
+    if (!currentUser) {
+      e.preventDefault();
+      setPreviewItem(null);
+      openModal({ redirectAfterLogin: href });
+    }
+  };
 
   return (
     <main style={{ backgroundColor: '#F3F0EE', minHeight: '100vh', overflowX: 'clip' }}>
@@ -572,6 +582,7 @@ export default function CatalogPage() {
                   {/* Full-width Action Button */}
                   <Link
                     href={buildConsultHref(item)}
+                    onClick={(e) => handleProtectedConsultClick(e, buildConsultHref(item))}
                     className="btn-secondary catalog-card-cta lg:text-[13px] lg:py-2.5 whitespace-nowrap"
                     style={{
                       marginTop: 'auto',
@@ -645,7 +656,8 @@ export default function CatalogPage() {
             </div>
 
             <Link
-              href="/profil#konsultasi"
+              href="/profil?tab=konsultasi"
+              onClick={(e) => handleProtectedConsultClick(e, '/profil?tab=konsultasi')}
               className="btn-secondary"
               style={{
                 padding: '14px 30px',
@@ -801,6 +813,7 @@ export default function CatalogPage() {
 
               <Link
                 href={buildConsultHref(previewItem)}
+                onClick={(e) => handleProtectedConsultClick(e, buildConsultHref(previewItem))}
                 className="btn-secondary"
                 style={{
                   width: '100%',

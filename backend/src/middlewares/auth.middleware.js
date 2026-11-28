@@ -68,7 +68,8 @@ const requireAdmin = async (req, res, next) => {
       select: { id: true, role: true, email: true },
     });
 
-    if (!dbUser || (dbUser.role !== 'admin' && dbUser.role !== 'owner')) {
+    const normalizedRole = dbUser?.role ? String(dbUser.role).trim().toLowerCase() : '';
+    if (!dbUser || (normalizedRole !== 'admin' && normalizedRole !== 'owner')) {
       return res.status(403).json({
         success: false,
         message: 'Akses ditolak. Operasi ini hanya diperbolehkan untuk pengguna dengan peran Admin atau Owner.',

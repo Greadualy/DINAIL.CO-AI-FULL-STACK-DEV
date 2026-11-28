@@ -2,15 +2,21 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useRole } from '@/context/RoleContext';
 import { DINAIL_ASSETS } from '@/constants/assets';
 import RevealTitle from '@/components/RevealTitle';
 
 export default function HeroSection() {
-  const { openModal } = useRole();
+  const { currentUser, openModal } = useRole();
+  const router = useRouter();
 
   const handleConsultationClick = () => {
-    openModal();
+    if (currentUser) {
+      router.push('/profil?tab=konsultasi');
+    } else {
+      openModal({ redirectAfterLogin: '/profil?tab=konsultasi' });
+    }
   };
 
   return (

@@ -9,6 +9,7 @@ import Footer from '@/components/Footer';
 import RevealTitle from '@/components/RevealTitle';
 import Skeleton from '@/components/Skeleton';
 import { DINAIL_ASSETS } from '@/constants/assets';
+import { useRole } from '@/context/RoleContext';
 
 // DATA TIER HARGA RESMI SHOPEE DINAIL.CO
 
@@ -214,7 +215,16 @@ function formatRupiah(val: number) {
 // TIER CARD COMPONENT
 
 function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
+  const { currentUser, openModal } = useRole();
   const isHighlight = pkg.highlight;
+  const consultHref = `/profil?tab=konsultasi&design=${encodeURIComponent(pkg.fullName)}`;
+
+  const handleConsultClick = (e: React.MouseEvent) => {
+    if (!currentUser) {
+      e.preventDefault();
+      openModal({ redirectAfterLogin: consultHref });
+    }
+  };
 
   return (
     <motion.div
@@ -433,7 +443,8 @@ function TierCard({ pkg, index }: { pkg: TierPackage; index: number }) {
         {/* CTA Buttons — push to bottom */}
         <div className="pricelist-cta-group mt-auto" style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Link
-            href="/profil#konsultasi"
+            href={consultHref}
+            onClick={handleConsultClick}
             className="btn-primary pricelist-cta-btn w-full lg:text-[13px] lg:py-2.5"
             style={{
               width: '100%',
@@ -852,6 +863,14 @@ function ShapeGuideSection() {
     Square: '#E8F9EE',
     Squoval: '#F9F5E8',
   };
+  const { currentUser, openModal } = useRole();
+
+  const handleShapeConsultClick = (e: React.MouseEvent) => {
+    if (!currentUser) {
+      e.preventDefault();
+      openModal({ redirectAfterLogin: '/profil?tab=konsultasi' });
+    }
+  };
 
   return (
     <section
@@ -1046,7 +1065,8 @@ function ShapeGuideSection() {
             </p>
           </div>
           <Link
-            href="/profil#konsultasi"
+            href="/profil?tab=konsultasi"
+            onClick={handleShapeConsultClick}
             className="btn-secondary"
             style={{
               padding: '14px 30px',
