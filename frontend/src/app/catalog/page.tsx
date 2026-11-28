@@ -10,7 +10,6 @@ import RevealTitle from '@/components/RevealTitle';
 import Skeleton from '@/components/Skeleton';
 import {
   MAIN_CATEGORIES,
-  CATEGORY_SUBFILTERS,
   CATALOG_DESIGNS,
   type MainCategory,
   type CatalogDesignItem,
@@ -20,7 +19,6 @@ import {
 
 export default function CatalogPage() {
   const [activeCategory, setActiveCategory] = useState<MainCategory>('Semua');
-  const [activeSubType, setActiveSubType] = useState<string>('Semua');
   const [previewItem, setPreviewItem] = useState<CatalogDesignItem | null>(null);
   const [isTierDropdownOpen, setIsTierDropdownOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,21 +61,15 @@ export default function CatalogPage() {
   const handleCategoryChange = (cat: MainCategory) => {
     if (cat === activeCategory) return;
     setActiveCategory(cat);
-    setActiveSubType('Semua');
     triggerLoading();
   };
 
-  const currentSubFilters =
-    activeCategory === 'Semua' ? [] : CATEGORY_SUBFILTERS[activeCategory];
-
-  const filteredDesigns = CATALOG_DESIGNS.filter((item) => {
-    const matchCategory = activeCategory === 'Semua' || item.category === activeCategory;
-    const matchSubType = activeSubType === 'Semua' || item.subType === activeSubType;
-    return matchCategory && matchSubType;
-  });
+  const filteredDesigns = CATALOG_DESIGNS.filter(
+    (item) => activeCategory === 'Semua' || item.category === activeCategory
+  );
 
   const buildConsultHref = (item: CatalogDesignItem) =>
-    `/profil?design=${encodeURIComponent(item.name)}&category=${encodeURIComponent(item.category)}&type=${encodeURIComponent(item.subType)}#konsultasi`;
+    `/profil?design=${encodeURIComponent(item.name)}&category=${encodeURIComponent(item.category)}#konsultasi`;
 
   return (
     <main style={{ backgroundColor: '#F3F0EE', minHeight: '100vh', overflowX: 'clip' }}>
@@ -308,69 +300,6 @@ export default function CatalogPage() {
               );
             })}
           </div>
-
-          {/* 3. SUB-FILTER CHIPS BERDASARKAN TIPE / KODE DESAIN */}
-          {activeCategory !== 'Semua' && (
-            <div
-              style={{
-                marginTop: 22,
-                paddingTop: 20,
-                borderTop: '1px solid #E5DFD7',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 12,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  color: '#696969',
-                }}
-              >
-                PILIH VARIAN DESAIN ({activeCategory.toUpperCase()})
-              </span>
-
-              <div
-                className="catalog-subfilter-tabs scrollbar-hidden"
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  justifyContent: 'center',
-                  gap: '8px',
-                }}
-              >
-                {['Semua', ...currentSubFilters].map((sub) => {
-                  const isSubActive = activeSubType === sub;
-                  const label = sub === 'Semua' ? 'Semua Varian' : sub;
-
-                  return (
-                    <button
-                      key={sub}
-                      type="button"
-                      onClick={() => setActiveSubType(sub)}
-                      style={{
-                        borderRadius: '999px',
-                        padding: '7px 18px',
-                        fontSize: '13px',
-                        fontWeight: isSubActive ? 600 : 500,
-                        backgroundColor: isSubActive ? '#F37338' : '#FCFBFA',
-                        color: isSubActive ? '#FFFFFF' : '#141413',
-                        border: isSubActive ? '1.5px solid #F37338' : '1px solid #DDD7CE',
-                        cursor: 'pointer',
-                        transition: 'all 0.18s ease',
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       </section>
 
@@ -398,15 +327,6 @@ export default function CatalogPage() {
                   {' '}
                   pada kategori{' '}
                   <strong style={{ color: '#141413', fontWeight: 600 }}>{activeCategory}</strong>
-                </>
-              )}
-              {activeSubType !== 'Semua' && (
-                <>
-                  {' '}
-                  ·{' '}
-                  <strong style={{ color: '#CF4500', fontWeight: 600 }}>
-                    {activeSubType}
-                  </strong>
                 </>
               )}
             </p>
@@ -459,10 +379,10 @@ export default function CatalogPage() {
                     }}
                   >
                     <Skeleton
-                      className="rounded-3xl catalog-skel-img"
+                      className="rounded-3xl catalog-skel-img aspect-[4/5]"
                       style={{
                         width: '100%',
-                        aspectRatio: '1 / 1',
+                        aspectRatio: '4 / 5',
                         borderRadius: '24px',
                       }}
                     />
@@ -477,7 +397,7 @@ export default function CatalogPage() {
               </motion.div>
             ) : (
               <motion.div
-                key={`catalog-grid-${activeCategory}-${activeSubType}`}
+                key={`catalog-grid-${activeCategory}`}
                 className="catalog-cards-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -523,9 +443,9 @@ export default function CatalogPage() {
                     height: '100%',
                   }}
                 >
-                {/* Image Area (1:1 Ratio, radius 24px) */}
+                {/* Image Area (4:5 Portrait Ratio, radius 24px) */}
                 <div
-                  className="catalog-card-img"
+                  className="catalog-card-img aspect-[4/5] overflow-hidden"
                   onClick={() => setPreviewItem(item)}
                   role="button"
                   tabIndex={0}
@@ -539,7 +459,7 @@ export default function CatalogPage() {
                   style={{
                     position: 'relative',
                     width: '100%',
-                    aspectRatio: '1 / 1',
+                    aspectRatio: '4 / 5',
                     borderRadius: '24px',
                     overflow: 'hidden',
                     backgroundColor: '#F3F0EE',
@@ -549,9 +469,15 @@ export default function CatalogPage() {
                 >
                   <Image
                     src={item.img}
-                    alt={`${item.name} — ${item.category} ${item.typeBadge}`}
+                    alt={`${item.name} — ${item.category} Tier dinail.co`}
                     fill
-                    style={{ objectFit: 'cover', transition: 'transform 0.4s ease' }}
+                    className="object-cover"
+                    style={{
+                      objectFit: 'cover',
+                      objectPosition: item.imagePosition || 'center',
+                      transform: item.imageScale ? `scale(${item.imageScale})` : undefined,
+                      transition: 'transform 0.4s ease',
+                    }}
                     sizes="(max-width: 640px) 48vw, (max-width: 1024px) 32vw, 25vw"
                   />
 
@@ -789,12 +715,27 @@ export default function CatalogPage() {
               ×
             </button>
 
-            <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', backgroundColor: '#F3F0EE' }}>
+            <div
+              className="aspect-[4/5] overflow-hidden"
+              style={{
+                position: 'relative',
+                width: '100%',
+                aspectRatio: '4 / 5',
+                maxHeight: '56vh',
+                overflow: 'hidden',
+                backgroundColor: '#F3F0EE',
+              }}
+            >
               <Image
                 src={previewItem.img}
                 alt={previewItem.name}
                 fill
-                style={{ objectFit: 'cover' }}
+                className="object-cover"
+                style={{
+                  objectFit: 'cover',
+                  objectPosition: previewItem.imagePosition || 'center',
+                  transform: previewItem.imageScale ? `scale(${previewItem.imageScale})` : undefined,
+                }}
                 sizes="520px"
               />
             </div>
@@ -807,25 +748,16 @@ export default function CatalogPage() {
                     fontWeight: 700,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
-                    color: '#141413',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  {previewItem.category}
-                </span>
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    backgroundColor: '#141413',
-                    color: '#FFFFFF',
+                    color: '#CF4500',
+                    backgroundColor: '#FFF5F0',
+                    border: '1px solid #F9D5C2',
                     padding: '4px 12px',
                     borderRadius: '999px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
                   }}
                 >
-                  {previewItem.typeBadge}
+                  {previewItem.category} Tier
                 </span>
               </div>
 

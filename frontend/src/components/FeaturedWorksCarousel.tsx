@@ -24,28 +24,28 @@ interface FeaturedWorkItem {
 
 const FEATURED_WORKS: FeaturedWorkItem[] = [
   {
-    id: 'classic-champagne-cat-eye',
-    tier: 'Classic Tier',
-    title: 'Champagne Cat Eye Floral',
-    img: '/images/catalog/classic/classic-4.webp',
-  },
-  {
-    id: 'luxury-burgundy-sakura',
+    id: 'featured-burgundy-sakura',
     tier: 'Luxury Tier',
     title: 'Burgundy 3D Sakura Bloom',
-    img: '/images/catalog/luxury/luxury-15.webp',
+    img: '/images/featured/featured-1.webp',
   },
   {
-    id: 'prestige-savanna-couture',
+    id: 'featured-savanna-couture',
     tier: 'Prestige Tier',
     title: 'Savanna Floral 3D Couture',
-    img: '/images/catalog/prestige/prestige-8.webp',
+    img: '/images/featured/featured-2.webp',
   },
   {
-    id: 'classic-espresso-starburst',
+    id: 'featured-y2k-monochrome',
+    tier: 'Luxury Tier',
+    title: 'Y2K Monochrome 3D Square',
+    img: '/images/featured/featured-3.webp',
+  },
+  {
+    id: 'featured-liquid-silver-chrome',
     tier: 'Classic Tier',
-    title: 'Espresso Starburst Aura',
-    img: '/images/catalog/classic/classic-9.webp',
+    title: 'Liquid Silver Chrome Swirl',
+    img: '/images/featured/featured-4.webp',
   },
 ];
 
@@ -206,9 +206,11 @@ function SlidePillAperture({
           src={item.img}
           alt={`${item.title} — ${item.tier} dinail.co`}
           fill
+          quality={90}
           priority={slotVirtualIndex === 0}
-          sizes="(max-width: 639px) 92vw, (max-width: 1023px) 74vw, 920px"
-          style={{ objectFit: 'cover', pointerEvents: 'none' }}
+          sizes="(max-width: 639px) 94vw, (max-width: 1023px) 78vw, 960px"
+          className="object-cover object-center"
+          style={{ objectFit: 'cover', objectPosition: 'center', pointerEvents: 'none' }}
         />
       </div>
 

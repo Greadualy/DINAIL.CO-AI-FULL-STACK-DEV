@@ -10,14 +10,22 @@ export const DINAIL_ASSETS = {
   /** Foto hero utama nail art showcase */
   heroNailArt: '/images/hero/hero.webp',
 
+  /** Foto HD Karya Unggulan (Featured Works Carousel) */
+  featuredWorks: [
+    '/images/featured/featured-1.webp',
+    '/images/featured/featured-2.webp',
+    '/images/featured/featured-3.webp',
+    '/images/featured/featured-4.webp',
+  ],
+
   /**
    * 6 foto dokumentasi asli untuk masing-masing langkah pemesanan
    */
   stepImages: {
     1: '/images/catalog/basic/basic-6.webp',      // Langkah 01: Login
-    2: '/images/catalog/classic/classic-4.webp',  // Langkah 02: Cek ukuran kuku
+    2: '/images/catalog/luxury/luxury-12.webp',   // Langkah 02: Cek ukuran kuku
     3: '/images/catalog/classic/classic-11.webp', // Langkah 03: Isi data diri
-    4: '/images/catalog/luxury/luxury-8.webp',    // Langkah 04: Isi form konsultasi
+    4: '/images/catalog/luxury/luxury-16.webp',   // Langkah 04: Isi form konsultasi
     5: '/images/catalog/luxury/luxury-15.webp',   // Langkah 05: Tunggu konfirmasi
     6: '/images/catalog/prestige/prestige-8.webp', // Langkah 06: ACC & Shopee
   },

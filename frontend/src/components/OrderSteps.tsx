@@ -44,13 +44,25 @@ const arcVariants: Variants = {
   },
 };
 
-const STEPS = [
+interface OrderStep {
+  num: string;
+  title: string;
+  desc: string;
+  img: string;
+  href: string;
+  imagePosition?: string;
+  imageScale?: number;
+}
+
+const STEPS: OrderStep[] = [
   {
     num: '01',
     title: 'Login Website',
     desc: 'Masuk ke akun dinail.co untuk memulai sesi konsultasi pribadi dan menyimpan riwayat ukuran kukumu.',
     img: DINAIL_ASSETS.stepImages[1],
     href: '/profil',
+    imagePosition: '40% 62%',
+    imageScale: 1.35,
   },
   {
     num: '02',
@@ -58,6 +70,8 @@ const STEPS = [
     desc: 'Unggah foto jari dan kukumu sesuai panduan di website agar tim kami dapat mengukur size kuku secara akurat.',
     img: DINAIL_ASSETS.stepImages[2],
     href: '/profil#ukuran',
+    imagePosition: '50% 50%',
+    imageScale: 1.1,
   },
   {
     num: '03',
@@ -65,6 +79,7 @@ const STEPS = [
     desc: 'Lengkapi profil dan data diri pemesan untuk pencatatan kartu ukuran dan pengiriman.',
     img: DINAIL_ASSETS.stepImages[3],
     href: '/profil#konsultasi',
+    imagePosition: '50% 25%',
   },
   {
     num: '04',
@@ -72,6 +87,7 @@ const STEPS = [
     desc: 'Pilih bentuk kuku, panjang, warna, serta unggah referensi desain pada form konsultasi yang tersedia.',
     img: DINAIL_ASSETS.stepImages[4],
     href: '/profil#konsultasi',
+    imagePosition: '50% 45%',
   },
   {
     num: '05',
@@ -79,6 +95,7 @@ const STEPS = [
     desc: 'Admin dinail.co akan memverifikasi ukuran kuku dan detail desainmu, lalu memperbarui status pesanan di akunmu.',
     img: DINAIL_ASSETS.stepImages[5],
     href: '/profil#status-tracker',
+    imagePosition: '50% 52%',
   },
   {
     num: '06',
@@ -86,6 +103,7 @@ const STEPS = [
     desc: 'Jika konsultasi telah di-ACC oleh Admin, tombol checkout khusus akan aktif dan kamu dapat menyelesaikan pemesanan melalui Shopee.',
     img: DINAIL_ASSETS.stepImages[6],
     href: '/profil#status-tracker',
+    imagePosition: '55% 60%',
   },
 ];
 
@@ -227,7 +245,13 @@ function StepCard({ step, colInRow }: { step: typeof STEPS[0]; colInRow: number 
             src={step.img}
             alt={`Langkah ${step.num}: ${step.title}`}
             fill
-            style={{ objectFit: 'cover' }}
+            className="object-cover"
+            style={{
+              objectFit: 'cover',
+              objectPosition: step.imagePosition || 'center',
+              transform: step.imageScale ? `scale(${step.imageScale})` : undefined,
+              transformOrigin: step.imagePosition || 'center',
+            }}
             sizes="190px"
           />
         </Link>
@@ -413,7 +437,13 @@ function MobileStepCard({ step, index }: { step: typeof STEPS[0]; index: number 
             src={step.img}
             alt={`Langkah ${step.num}: ${step.title}`}
             fill
-            style={{ objectFit: 'cover' }}
+            className="object-cover"
+            style={{
+              objectFit: 'cover',
+              objectPosition: step.imagePosition || 'center',
+              transform: step.imageScale ? `scale(${step.imageScale})` : undefined,
+              transformOrigin: step.imagePosition || 'center',
+            }}
             sizes="120px"
           />
         </Link>
