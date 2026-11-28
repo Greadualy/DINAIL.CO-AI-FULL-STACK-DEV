@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/images/hero_nail_art.webp",
+        url: "/images/hero/hero.webp",
         width: 1200,
         height: 630,
         alt: "dinail.co — Custom Press-On Nails & Nail Art",
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
     title: "dinail.co — Custom Press-On Nails & Nail Art",
     description:
       "Karya custom press-on nails dan nail art presisi yang didesain khusus untuk ukuran jari kamu.",
-    images: ["/images/hero_nail_art.webp"],
+    images: ["/images/hero/hero.webp"],
   },
 };
 

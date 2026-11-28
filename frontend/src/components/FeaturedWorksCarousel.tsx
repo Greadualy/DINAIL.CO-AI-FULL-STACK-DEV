@@ -14,7 +14,6 @@ import {
   type MotionValue,
 } from 'motion/react';
 import RevealTitle from '@/components/RevealTitle';
-import { DINAIL_ASSETS } from '@/constants/assets';
 
 interface FeaturedWorkItem {
   id: string;
@@ -25,28 +24,28 @@ interface FeaturedWorkItem {
 
 const FEATURED_WORKS: FeaturedWorkItem[] = [
   {
-    id: 'luxury-velvet-luxe',
-    tier: 'Luxury Tier',
-    title: 'Velvet Cat Eye Luxe',
-    img: DINAIL_ASSETS.catalogPreviews[3],
-  },
-  {
-    id: 'classic-blush-chrome',
+    id: 'classic-champagne-cat-eye',
     tier: 'Classic Tier',
-    title: 'Blush Chrome Aura',
-    img: DINAIL_ASSETS.catalogPreviews[2],
+    title: 'Champagne Cat Eye Floral',
+    img: '/images/catalog/classic/classic-4.webp',
   },
   {
-    id: 'luxury-bridal-pearl',
+    id: 'luxury-burgundy-sakura',
     tier: 'Luxury Tier',
-    title: 'Bridal 3D Pearl Glow',
-    img: DINAIL_ASSETS.catalogPreviews[1],
+    title: 'Burgundy 3D Sakura Bloom',
+    img: '/images/catalog/luxury/luxury-15.webp',
   },
   {
-    id: 'classic-coquette-ribbon',
+    id: 'prestige-savanna-couture',
+    tier: 'Prestige Tier',
+    title: 'Savanna Floral 3D Couture',
+    img: '/images/catalog/prestige/prestige-8.webp',
+  },
+  {
+    id: 'classic-espresso-starburst',
     tier: 'Classic Tier',
-    title: 'Coquette Ribbon Charm',
-    img: DINAIL_ASSETS.catalogPreviews[5],
+    title: 'Espresso Starburst Aura',
+    img: '/images/catalog/classic/classic-9.webp',
   },
 ];
 

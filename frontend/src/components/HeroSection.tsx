@@ -35,7 +35,7 @@ export default function HeroSection() {
           fill
           preload
           sizes="100vw"
-          style={{ objectFit: 'cover', objectPosition: 'center', zIndex: 0 }}
+          style={{ objectFit: 'cover', objectPosition: '75% center', zIndex: 0 }}
         />
         <div className="hero-mobile-bg-overlay" />
       </div>
@@ -149,7 +149,7 @@ export default function HeroSection() {
             src={DINAIL_ASSETS.heroNailArt}
             alt="Showcase karya nail art dinail.co"
             fill
-            style={{ objectFit: 'cover', objectPosition: 'center' }}
+            style={{ objectFit: 'cover', objectPosition: '82% center' }}
             preload
             sizes="(max-width: 1023px) 100vw, 50vw"
           />
